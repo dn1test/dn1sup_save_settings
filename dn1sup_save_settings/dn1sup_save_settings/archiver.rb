@@ -11,9 +11,11 @@
 #   local/…                         ← содержимое Local-целей
 #
 # Гемы в Ruby SketchUp не устанавливать — внешний системный инструмент.
+# tar запускается через WinProcess (скрыто, без окна терминала), опираемся
+# только на код возврата: внутри SketchUp вывод дочерних процессов пуст.
 # =============================================================================
 
-require 'open3'
+require 'open3' # только для list() — диагностика вне SketchUp
 require 'fileutils'
 require 'json'
 require 'tmpdir'
@@ -22,6 +24,11 @@ require 'find'
 module Dn1supSaveSettings
   module Archiver
     extend self
+
+    # Полный путь к встроенному bsdtar: пин на System32 вместо поиска по PATH —
+    # детерминированно и позволяет проверять доступность без запуска процесса.
+    TAR_PATH = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
+                         'System32', 'tar.exe').freeze
 
     MANIFEST_NAME = 'dn1sup_settings_manifest.json'
     LOG_NAME = 'dn1sup_settings_log.txt'
@@ -32,18 +39,13 @@ module Dn1supSaveSettings
 
     class Error < StandardError; end
 
-    # Доступен ли движок (проверяется один раз за сессию).
-    # ВАЖНО: внутри SketchUp дочерние процессы не пишут в унаследованный
-    # stdout (даже «cmd /c echo» возвращает пустую строку), поэтому опираться
-    # на вывод нельзя — только на код возврата и отсутствие ENOENT.
+    # Доступен ли движок (проверяется один раз за сессию). Достаточно наличия
+    # файла: запуском процесса ничего дополнительно не проверяем — экономно и
+    # без малейшего шанса на окно терминала.
     def available?
       return @available unless @available.nil?
 
-      _out, _err, status = Open3.capture3('tar', '--version')
-      @available = status.success?
-    rescue StandardError => e
-      Log.warn("Встроенный zip-движок (tar.exe) недоступен: #{e.class}: #{e.message}")
-      @available = false
+      @available = File.file?(TAR_PATH)
     end
 
     # Собирает zip из манифеста и записей.
@@ -74,10 +76,8 @@ module Dn1supSaveSettings
                    build_log(manifest, entries, staging, dest_zip))
 
         top = Dir.children(staging).sort
-        _out, err, status = Open3.capture3('tar', '-acf', dest_zip, '-C', staging, *top)
-        unless status.success?
-          raise Error, "tar.exe: код #{status.exitstatus}#{err.strip.empty? ? '' : " — #{err.strip}"}"
-        end
+        code = WinProcess.run(TAR_PATH, '-acf', dest_zip, '-C', staging, *top)
+        raise Error, "tar.exe: код #{code}" unless code.zero?
       end
       dest_zip
     end
@@ -88,10 +88,8 @@ module Dn1supSaveSettings
       raise Error, "Архив не найден: #{zip_path}" unless File.file?(zip_path)
 
       FileUtils.mkdir_p(dest_dir)
-      _out, err, status = Open3.capture3('tar', '-xf', zip_path, '-C', dest_dir)
-      unless status.success?
-        raise Error, "tar.exe: код #{status.exitstatus}#{err.strip.empty? ? '' : " — #{err.strip}"}"
-      end
+      code = WinProcess.run(TAR_PATH, '-xf', zip_path, '-C', dest_dir)
+      raise Error, "tar.exe: код #{code}" unless code.zero?
       dest_dir
     end
 
@@ -103,8 +101,8 @@ module Dn1supSaveSettings
       return nil unless available?
 
       Dir.mktmpdir('dn1sup_mf_') do |tmp|
-        _out, _err, status = Open3.capture3('tar', '-xf', zip_path, '-C', tmp, MANIFEST_NAME)
-        return nil unless status.success?
+        code = WinProcess.run(TAR_PATH, '-xf', zip_path, '-C', tmp, MANIFEST_NAME)
+        return nil unless code.zero?
 
         path = File.join(tmp, MANIFEST_NAME)
         return nil unless File.file?(path)
@@ -124,8 +122,8 @@ module Dn1supSaveSettings
       return nil unless available?
 
       Dir.mktmpdir('dn1sup_lg_') do |tmp|
-        _out, _err, status = Open3.capture3('tar', '-xf', zip_path, '-C', tmp, LOG_NAME)
-        return nil unless status.success?
+        code = WinProcess.run(TAR_PATH, '-xf', zip_path, '-C', tmp, LOG_NAME)
+        return nil unless code.zero?
 
         path = File.join(tmp, LOG_NAME)
         return nil unless File.file?(path)
@@ -137,10 +135,11 @@ module Dn1supSaveSettings
       nil
     end
 
-    # Список записей архива (tar -tf). Диагностика: внутри SketchUp stdout
-    # дочерних процессов пуст — метод осмыслен только в обычном Ruby.
+    # Список записей архива (tar -tf). Диагностика: вывод здесь нужен, а внутри
+    # SketchUp stdout дочерних процессов пуст — метод осмыслен только в
+    # обычном Ruby, поэтому оставлен на Open3 (вне SketchUp окна не проблема).
     def list(zip_path)
-      out, _err, status = Open3.capture3('tar', '-tf', zip_path)
+      out, _err, status = Open3.capture3(TAR_PATH, '-tf', zip_path)
       return [] unless status.success?
 
       out.lines.map(&:strip).reject(&:empty?)
