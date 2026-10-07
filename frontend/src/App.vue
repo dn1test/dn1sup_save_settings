@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import {
-  Archive, ArchiveRestore, CheckCircle2, Clock3, Eye, FileText, FolderOpen,
+  Archive, ArchiveRestore, CheckCircle2, CircleHelp, Clock3, Eye, FileText, FolderOpen,
   Loader2, Moon, PackageX, Pen, RotateCw, Save, Sun, Trash2, TriangleAlert, Upload, X
 } from 'lucide-vue-next'
 import {
@@ -11,9 +11,22 @@ import {
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
 import Modal from './components/Modal.vue'
+import HelpModal from './components/HelpModal.vue'
 import Toast from './components/Toast.vue'
 
 const { isDark, toggleTheme } = useTheme()
+
+// -- справка ----------------------------------------------------------------
+// Открывается кнопкой «?» в шапке; автопоказ — по одноразовому флагу
+// state.showHelp (пункт меню «Справка» в Ruby передаёт его в push_state).
+
+const helpOpen = ref(false)
+watch(() => state.showHelp, (v) => {
+  if (v) {
+    helpOpen.value = true
+    state.showHelp = false
+  }
+})
 
 // -- выбор путей ----------------------------------------------------------------
 
@@ -229,6 +242,9 @@ onMounted(loadState)
         <button v-if="!isMock" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-bold" title="Обновить из dev-папки" @click="updateFromDev">
           DEV
         </button>
+        <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Справка: как пользоваться" @click="helpOpen = true">
+          <CircleHelp :size="16" />
+        </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" :title="isDark ? 'Светлая тема' : 'Тёмная тема'" @click="toggleTheme">
           <Sun v-if="isDark" :size="16" />
           <Moon v-else :size="16" />
@@ -441,6 +457,9 @@ onMounted(loadState)
         Сброс плагинов
       </button>
     </footer>
+
+    <!-- Модал справки -->
+    <HelpModal :open="helpOpen" @close="helpOpen = false" />
 
     <!-- Модал восстановления -->
     <Modal :open="!!restoreModal" title="Восстановление из архива" max-width="max-w-lg" @close="restoreModal = null">

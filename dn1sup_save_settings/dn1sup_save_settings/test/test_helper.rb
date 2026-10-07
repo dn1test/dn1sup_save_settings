@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 # =============================================================================
 # dn1sup_save_settings/test/test_helper.rb — мини-харнесс тестов
-# «DN1SUP Save Settings».
+# «DN1Sup Save Settings».
 #
 # Работает в двух средах:
 #   • внутри SketchUp — запуск через ext_test MCP-сервера sketchup-dev;

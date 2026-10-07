@@ -28,7 +28,7 @@ module Dn1supSaveSettings
     # Полный путь к встроенному bsdtar: пин на System32 вместо поиска по PATH —
     # детерминированно и позволяет проверять доступность без запуска процесса.
     TAR_PATH = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
-                         'System32', 'tar.exe').freeze
+                         'System32', 'tar.exe').tr('/', '\\').freeze
 
     MANIFEST_NAME = 'dn1sup_settings_manifest.json'
     LOG_NAME = 'dn1sup_settings_log.txt'

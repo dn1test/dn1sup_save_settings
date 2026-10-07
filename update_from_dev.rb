@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # -------------------------------------------------------------------------------
-# Standalone CLI Script: Обновление DN1SUP Save Settings из dev-папки в SketchUp Plugins
+# Standalone CLI Script: Обновление DN1Sup Save Settings из dev-папки в SketchUp Plugins
 # Запуск:
 #   ruby update_from_dev.rb
 # -------------------------------------------------------------------------------
@@ -11,7 +11,7 @@ require 'net/http'
 require 'json'
 
 puts '=========================================================='
-puts '  DN1SUP Save Settings — Обновление из dev-папки'
+puts '  DN1Sup Save Settings — Обновление из dev-папки'
 puts '=========================================================='
 
 dev_dir = ARGV[0] || File.expand_path(__dir__)
@@ -81,7 +81,7 @@ begin
 rescue Errno::ECONNREFUSED, Net::OpenTimeout, StandardError
   puts "  ℹ️  SketchUp dev-мост не запущен на порту #{bridge_port}."
   puts "     Файлы в каталоге Plugins обновлены. При следующем открытии SketchUp"
-  puts "     или через меню 'Extensions -> DN1SUP -> Save Settings -> Обновить из dev-папки' изменения вступят в силу."
+  puts "     или через меню 'Extensions -> DN1Sup -> Save Settings -> Обновить из dev-папки' изменения вступят в силу."
 end
 
 puts "\nГотово!"

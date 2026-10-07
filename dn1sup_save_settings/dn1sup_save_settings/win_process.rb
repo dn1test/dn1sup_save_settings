@@ -63,10 +63,15 @@ module Dn1supSaveSettings
       @shell ||= WIN32OLE.new('WScript.Shell')
     end
 
-    # Командная строка для WScript.Shell.Run: создаётся процесс напрямую
-    # (без cmd), поэтому каждому аргументу достаточно двойных кавычек.
+    # Командная строка для WScript.Shell.Run: процесс создаётся напрямую
+    # (без cmd), поэтому кавычить нужно только аргументы с пробелами —
+    # кавычки вокруг КАЖДОГО аргумента ломают разбор остатка строки у
+    # cmd.exe («cmd /c "exit" "0"» возвращает 1, а не 0).
     def build_command_line(argv)
-      argv.map { |arg| %("#{arg}") }.join(' ')
+      argv.map do |arg|
+        arg = arg.to_s
+        arg.empty? || arg.match?(/\s/) ? %("#{arg}") : arg
+      end.join(' ')
     end
 
     # Фолбэк (не Windows или нет win32ole): прежнее поведение — окно

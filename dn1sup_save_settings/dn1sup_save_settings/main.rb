@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 # =============================================================================
-# dn1sup_save_settings/main.rb — основная логика расширения «DN1SUP Save Settings».
+# dn1sup_save_settings/main.rb — основная логика расширения «DN1Sup Save Settings».
 #
 # Код рассчитан на горячую перезагрузку (ext_reload MCP-сервера sketchup-dev):
 #   • диалоги регистрируются через track_* и снимаются в unload! — старая
@@ -53,20 +53,20 @@ module Dn1sup
   def self.common_menu
     @common_menu ||= begin
       legacy = (defined?($dn1sup_common_menu) && $dn1sup_common_menu) || (defined?($dn1sup_menu) && $dn1sup_menu)
-      legacy || UI.menu('Extensions').add_submenu('DN1SUP')
+      legacy || UI.menu('Extensions').add_submenu('DN1Sup')
     end
   end
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.6.1'.freeze
+  VERSION   = '0.7.0'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
-  COMMON_MENU = 'DN1SUP'.freeze          # общее меню всех расширений DN1Sup
+  COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
   MENU_NAME   = 'Save Settings'.freeze   # подменю расширения внутри COMMON_MENU
 
-  TOOLBAR_NAME = 'DN1SUP Save Settings'.freeze
-  CMD_TOOLTIP  = 'DN1SUP Save Settings — резервные копии настроек SketchUp'.freeze
+  TOOLBAR_NAME = 'DN1Sup Save Settings'.freeze
+  CMD_TOOLTIP  = 'DN1Sup Save Settings — резервные копии настроек SketchUp'.freeze
 
   REPO     = 'dn1test/sketchup-dn1sup-extensions'.freeze
   ID       = 'dn1sup_save_settings'.freeze
@@ -119,7 +119,7 @@ module Dn1supSaveSettings
     end
 
     # Меню и панель инструментов создаются один раз на сессию SketchUp.
-    # Своё подменю внутри общего меню DN1SUP.
+    # Своё подменю внутри общего меню DN1Sup.
     def setup_ui
       return if @menu_created || (defined?(Dn1sup) && Dn1sup.instance_variable_get(:@ss_menu))
 
@@ -154,6 +154,7 @@ module Dn1supSaveSettings
       menu.add_item('🔄 Обновить из dev-папки') { Dn1supSaveSettings.safe { Dn1supSaveSettings.update_from_dev } }
       menu.add_item('⚡ Перезагрузить (Hot Reload)') { Dn1supSaveSettings.safe { Dn1supSaveSettings.hot_reload } }
       menu.add_separator
+      menu.add_item('Справка') { Dn1supSaveSettings.safe { Dn1supSaveSettings.show_dialog(true) } }
       menu.add_item('О расширении') { Dn1supSaveSettings.about }
 
       schedule_update_check
@@ -227,6 +228,7 @@ module Dn1supSaveSettings
         "Сохранение параметров SketchUp в zip-архив и восстановление из архива.\n" \
         "PrivatePreferences.json, SharedPreferences.json, Components, Materials,\n" \
         "Plugins, Styles, Templates.\n\n" \
+        "Справка: кнопка «?» в окне или пункт меню «Справка».\n\n" \
         "Хранилище: #{Store.dir}\n" \
         "Журнал работы: #{Log.path}"
       )

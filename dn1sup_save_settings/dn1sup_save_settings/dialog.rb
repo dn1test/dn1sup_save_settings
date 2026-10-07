@@ -94,7 +94,10 @@ module Dn1supSaveSettings
       "Save Settings v#{VERSION} — настройки SketchUp"
     end
 
-    def show_dialog
+    # help: true — окно откроется с показанной справкой (пункт меню «Справка»);
+    # флаг одноразовый, передаётся в UI с первым push_state.
+    def show_dialog(help = false)
+      @pending_help = true if help
       dlg = @dialog
       if dlg && dlg.visible?
         dlg.bring_to_front
@@ -335,7 +338,7 @@ module Dn1supSaveSettings
 
     def push_state(dlg)
       payload = safe do
-        {
+        h = {
           'version' => VERSION,
           'su_version' => Paths.su_version,
           'su_year' => Paths.su_year,
@@ -352,7 +355,12 @@ module Dn1supSaveSettings
           'pending_restore' => DeferredApply.state,
           'restore_relaunch' => Settings.restore_relaunch
         }
+        # Одноразовый флаг справки (пункт меню «Справка»): UI откроет окно
+        # справки при получении состояния и сбросит флаг у себя.
+        h['show_help'] = true if @pending_help
+        h
       end
+      @pending_help = nil
       dlg.execute_script("window.pushState(#{JSON.generate(payload)});")
     rescue StandardError => e
       Log.exception(e, 'push_state')

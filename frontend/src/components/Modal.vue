@@ -4,7 +4,9 @@ import { X } from 'lucide-vue-next'
 defineProps({
   open: { type: Boolean, default: false },
   title: { type: String, default: '' },
-  maxWidth: { type: String, default: 'max-w-md' }
+  maxWidth: { type: String, default: 'max-w-md' },
+  // Ограничение высоты содержимого; замена дефолта позволяет окну быть выше
+  bodyClass: { type: String, default: 'max-h-[60vh]' }
 })
 defineEmits(['close'])
 </script>
@@ -25,7 +27,7 @@ defineEmits(['close'])
           <X :size="16" />
         </button>
       </header>
-      <div class="px-4 py-3 text-sm max-h-[60vh] overflow-y-auto">
+      <div class="px-4 py-3 text-sm overflow-y-auto" :class="bodyClass">
         <slot />
       </div>
       <footer

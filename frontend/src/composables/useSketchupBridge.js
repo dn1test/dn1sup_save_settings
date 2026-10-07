@@ -42,7 +42,8 @@ const state = reactive({
   toast: null,   // { kind: 'ok' | 'err', text }
   restartBanner: false,
   pendingRestore: null,  // {created_at, archive, labels, from_current_session, result} | null
-  restoreRelaunch: true  // запускать SketchUp после отложенного применения
+  restoreRelaunch: true, // запускать SketchUp после отложенного применения
+  showHelp: false        // одноразовый флаг Ruby: открыть справку (пункт меню «Справка»)
 })
 
 let toastTimer = null
@@ -135,6 +136,7 @@ if (typeof window !== 'undefined') {
     state.history = payload.history || []
     state.pendingRestore = payload.pending_restore || null
     state.restoreRelaunch = payload.restore_relaunch !== false
+    state.showHelp = !!payload.show_help
     state.busy = null
   }
   window.pushResult = function (kind, payload) {

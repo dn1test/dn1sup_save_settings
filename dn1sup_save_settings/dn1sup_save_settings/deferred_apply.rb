@@ -231,7 +231,7 @@ module Dn1supSaveSettings
       # Полный путь к Windows PowerShell 5.1 — как у tar.exe в archiver.rb,
       # детерминированно вместо поиска по PATH.
       ps = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
-                     'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+                     'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe').tr('/', '\\')
       args = [ps, '-NoProfile', '-ExecutionPolicy', 'Bypass',
               '-WindowStyle', 'Hidden', '-File', script,
               '-SuPid', Process.pid.to_s, '-PendingDir', dir]
