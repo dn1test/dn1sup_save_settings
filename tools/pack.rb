@@ -16,20 +16,20 @@ require 'tmpdir'
 require 'zlib'
 
 CONFIG = {
-  id:         'dn1sup_save_settings',
-  loader:     'dn1sup_save_settings/dn1sup_save_settings.rb',
-  dir:        'dn1sup_save_settings/dn1sup_save_settings',
-  target_dir: 'dn1sup_save_settings'
+  id:         'dn1sup_create_project',
+  loader:     'dn1sup_create_project/dn1sup_create_project.rb',
+  dir:        'dn1sup_create_project/dn1sup_create_project',
+  target_dir: 'dn1sup_create_project'
 }.freeze
 
 EXCLUDE_FILES = %w[
   dev_updater.rb .sketchup_dev.json README.md README.MD
   .gitignore package.json package-lock.json CHANGELOG.md NOTES.md
-].freeze
+].map(&:downcase).freeze
 
 EXCLUDE_DIRS = %w[
   test tests archive dist frontend node_modules .git .zcode _old _tmp
-].freeze
+].map(&:downcase).freeze
 
 def dos_parts(t)
   [(t.year - 1980) << 9 | t.month << 5 | t.day, t.hour << 11 | t.min << 5 | t.sec / 2]
@@ -131,5 +131,4 @@ Dir.mktmpdir do |tmp|
   write_zip(out, entries.sort_by(&:first))
   puts "Собран #{out} (v#{version}, файлов: #{entries.size})"
 end
-
 
