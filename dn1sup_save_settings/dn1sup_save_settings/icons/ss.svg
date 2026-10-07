@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs>
+    <linearGradient id="ssBody" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#36abf7"/>
+      <stop offset="100%" stop-color="#006fb8"/>
+    </linearGradient>
+    <linearGradient id="ssBadge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
+  <!-- Корпус дискеты (сохранение) -->
+  <path d="M4 3.5A1.5 1.5 0 0 1 5.5 2h11.6a2 2 0 0 1 1.4.6l2.9 2.9a2 2 0 0 1 .6 1.4V20a2 2 0 0 1-2 2h-14A1.5 1.5 0 0 1 4 20.5v-17z" fill="url(#ssBody)"/>
+  <!-- Верхняя шторка с прорезью -->
+  <rect x="7" y="2" width="10" height="6.5" rx="1" fill="#ffffff" opacity="0.95"/>
+  <rect x="11.2" y="3.2" width="4" height="4.2" rx="0.6" fill="#006fb8" opacity="0.85"/>
+  <!-- Нижнее окно данных -->
+  <rect x="7" y="12" width="10" height="10" rx="1" fill="#ffffff" opacity="0.92"/>
+  <line x1="9" y1="15" x2="15" y2="15" stroke="#94a3b8" stroke-width="1.1" stroke-linecap="round"/>
+  <line x1="9" y1="17.5" x2="13" y2="17.5" stroke="#cbd5e1" stroke-width="1.1" stroke-linecap="round"/>
+  <!-- Бейдж архива (zip) -->
+  <circle cx="17.5" cy="17.5" r="4.5" fill="url(#ssBadge)"/>
+  <rect x="16.1" y="14.4" width="2.8" height="0.9" rx="0.45" fill="#ffffff"/>
+  <rect x="16.1" y="15.8" width="2.8" height="0.9" rx="0.45" fill="#ffffff"/>
+  <rect x="16.1" y="17.2" width="2.8" height="0.9" rx="0.45" fill="#ffffff"/>
+</svg>
