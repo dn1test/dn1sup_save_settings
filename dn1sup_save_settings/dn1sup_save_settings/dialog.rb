@@ -106,11 +106,14 @@ module Dn1supSaveSettings
       end
       # Закрытый HtmlDialog повторным show не поднимается — пересоздаём.
       dialogs.delete(dlg) if dlg
+      # Ширина окна зафиксирована (min = max = width): интерфейс рассчитан на
+      # компактную колонку; высота остаётся изменяемой.
       dlg = track_dialog(UI::HtmlDialog.new(
                            dialog_title: window_title,
                            preferences_key: 'dn1sup_save_settings_dialog',
-                           width: 920, height: 660,
-                           min_width: 720, min_height: 520,
+                           width: 700, height: 660,
+                           min_width: 700, max_width: 700,
+                           min_height: 520,
                            resizable: true,
                            style: UI::HtmlDialog::STYLE_DIALOG
                          ))
