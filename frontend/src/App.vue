@@ -339,6 +339,18 @@ onMounted(loadState)
             </button>
           </div>
         </div>
+        <div
+          v-if="!state.archiveDirCustom"
+          class="flex items-start gap-2 mx-2 mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[10px] leading-snug"
+        >
+          <TriangleAlert :size="12" class="shrink-0 mt-0.5" />
+          <span class="flex-1">
+            Папка по умолчанию лежит в профиле SketchUp: при удалении SketchUp архивы удалятся вместе с ней.
+          </span>
+          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
+            Выбрать…
+          </button>
+        </div>
         <div class="flex-1 overflow-y-auto px-2 py-2">
           <label
             v-for="t in state.targets"
@@ -662,6 +674,19 @@ onMounted(loadState)
           <div v-if="state.archiveDirCustom" class="mt-1 text-[10px] text-slate-400">
             Стандартная папка: <span class="font-mono break-all">{{ state.defaultBackupsPath }}</span>
           </div>
+        </div>
+
+        <div
+          v-if="!state.archiveDirCustom"
+          class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
+        >
+          <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
+          <span>
+            Папка по умолчанию находится внутри профиля SketchUp
+            (<span class="font-mono">%APPDATA%\SketchUp\…</span>): при удалении SketchUp
+            с компьютера она будет удалена вместе со всеми архивами. Для долговременного
+            хранения выберите папку вне каталогов SketchUp.
+          </span>
         </div>
 
         <div class="flex items-start gap-2 p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 text-[11px] leading-snug">

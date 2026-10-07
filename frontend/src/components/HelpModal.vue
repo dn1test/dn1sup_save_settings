@@ -97,6 +97,14 @@ defineEmits(['close'])
           По умолчанию архивы лежат в хранилище расширения в профиле пользователя. Не выбирайте
           папку внутри каталогов SketchUp (Materials, Plugins, …) — архив захватывал бы сам себя.
         </p>
+        <div class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug">
+          <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
+          <span>
+            Папка по умолчанию находится внутри профиля SketchUp — при удалении SketchUp
+            с компьютера она удаляется вместе со всеми архивами. Храните важные копии
+            в папке вне SketchUp.
+          </span>
+        </div>
       </section>
 
       <section class="space-y-1">
