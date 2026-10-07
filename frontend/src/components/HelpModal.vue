@@ -104,14 +104,16 @@ defineEmits(['close'])
         <p>
           Кнопки внизу окна: <span class="font-semibold">«Сброс интерфейса»</span> удаляет
           <span class="font-mono">PrivatePreferences.json</span> — вид SketchUp вернётся к заводскому;
-          <span class="font-semibold">«Сброс плагинов»</span> очищает папку Plugins.
+          <span class="font-semibold">«Сброс плагинов»</span> очищает папку Plugins, кроме файлов
+          самого Save Settings — расширение остаётся на месте.
           Применение — сразу после закрытия SketchUp; перед сбросом принудительно создаётся резервная копия.
         </p>
         <div class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug">
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
           <span>
-            «Сброс плагинов» удаляет все расширения, включая сам Save Settings —
-            вернуть их можно установкой .rbz или распаковкой резервной копии в папку Plugins.
+            «Сброс плагинов» удаляет все расширения, кроме самого Save Settings.
+            Вернуть остальные можно восстановлением резервной копии в SketchUp
+            (она включает папку Plugins) или установкой .rbz.
           </span>
         </div>
       </section>

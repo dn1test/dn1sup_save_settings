@@ -17,7 +17,8 @@
 #   4) выполняет действия по каждой цели: copy — копирует файл из staged
 #      в каталоги SketchUp (Local/Roaming); delete_file — удаляет файл
 #      (сброс интерфейса); clear_dir — очищает содержимое каталога
-#      (сброс плагинов: сам каталог остаётся);
+#      (сброс плагинов: сам каталог остаётся, а элементы из списка keep
+#      цели — файлы самого расширения — не удаляются);
 #   5) пишет result.txt (ok|error) и опционально запускает SketchUp снова.
 # Отмена (cancel!) удаляет pending-папку: скрипт, не найдя pending.json,
 # выходит, ничего не меняя. Повторный arm!/arm_reset! пересоздаёт папку.
@@ -37,7 +38,8 @@ module Dn1supSaveSettings
 
     # Действие по виду цели: файл настроек удаляется целиком (сброс интерфейса
     # — SketchUp создаст его заново с заводскими значениями), содержимое
-    # каталога очищается (сброс плагинов), обычное восстановление копирует
+    # каталога очищается (сброс плагинов; собственные файлы расширения
+    # передаются в keep и не удаляются), обычное восстановление копирует
     # staged-файл поверх.
     RESET_ACTION_BY_KIND = { 'file' => 'delete_file', 'dir' => 'clear_dir' }.freeze
 
@@ -58,11 +60,15 @@ module Dn1supSaveSettings
     # Подготовка сброса цели к заводскому состоянию (после закрытия SketchUp):
     # файл настроек будет удалён, содержимое каталога — очищено. Резервную
     # копию перед сбросом создаёт вызывающий код (принудительно).
+    # При сбросе плагинов из очистки исключаются собственные файлы
+    # расширения (keep) — оно остаётся в меню после сброса.
     def arm_reset!(target, relaunch: true, spawn_process: true)
       action = RESET_ACTION_BY_KIND.fetch(target[:kind]) do
         raise Error, "Неподдерживаемый вид цели для сброса: #{target[:kind]}"
       end
-      arm_entries([{ target: target, action: action }], kind: 'reset', archive: '',
+      entry = { target: target, action: action }
+      entry[:keep] = self_keep_names if action == 'clear_dir' && target[:key] == 'plugins'
+      arm_entries([entry], kind: 'reset', archive: '',
                   relaunch: relaunch, auto_backup: false, spawn_process: spawn_process)
     end
 
@@ -166,8 +172,10 @@ module Dn1supSaveSettings
         'roots'            => { 'local' => Paths.local_root, 'roaming' => Paths.roaming_root },
         'targets'          => prepared.map do |entry|
           t = entry[:target]
-          { 'key' => t[:key], 'scope' => t[:scope].to_s, 'name' => t[:name],
-            'label' => t[:label].to_s, 'action' => entry[:action] }
+          item = { 'key' => t[:key], 'scope' => t[:scope].to_s, 'name' => t[:name],
+                   'label' => t[:label].to_s, 'action' => entry[:action] }
+          item['keep'] = entry[:keep] if entry[:keep]
+          item
         end
       }
       File.write(File.join(dir, PENDING_FILE), JSON.pretty_generate(config))
@@ -181,7 +189,8 @@ module Dn1supSaveSettings
 
     # Нормализует запись задачи: action по умолчанию 'copy'; копировать можно
     # только файлы настроек с существующим src, удаление/очистка не требуют
-    # staged-файла.
+    # staged-файла. keep (имена внутри очищаемого каталога, которые нельзя
+    # удалять) имеет смысл только для clear_dir.
     def normalize_entry(entry)
       action = entry[:action] || 'copy'
       unless %w[copy delete_file clear_dir].include?(action)
@@ -197,8 +206,19 @@ module Dn1supSaveSettings
 
         { target: entry[:target], action: action, src: src }
       else
-        { target: entry[:target], action: action }
+        item = { target: entry[:target], action: action }
+        keep = Array(entry[:keep]).map(&:to_s).reject(&:empty?).uniq.sort
+        item[:keep] = keep unless keep.empty?
+        item
       end
+    end
+
+    # Имена собственных файлов расширения в папке Plugins: регистратор и
+    # пакет. Вычисляется по факту вызова — при загрузке файла константа ID
+    # ещё не определена (порядок require в main.rb).
+    def self_keep_names
+      id = defined?(Dn1supSaveSettings::ID) ? Dn1supSaveSettings::ID : 'dn1sup_save_settings'
+      [id, "#{id}.rb"]
     end
 
     def read_config
@@ -318,8 +338,23 @@ module Dn1supSaveSettings
                       }
                   } elseif ($action -eq 'clear_dir') {
                       if (Test-Path -LiteralPath $dst) {
-                          Get-ChildItem -LiteralPath $dst -Force | Remove-Item -Recurse -Force
-                          $lines.Add('ok ' + $t.name + ' cleared')
+                          # keep: names inside the directory that must survive
+                          # the reset (the Save Settings extension itself).
+                          $keep = @()
+                          if ($t.PSObject.Properties['keep']) { $keep = @($t.keep) }
+                          $kept = 0
+                          Get-ChildItem -LiteralPath $dst -Force | ForEach-Object {
+                              if ($keep -contains $_.Name) {
+                                  $kept++
+                              } else {
+                                  Remove-Item -LiteralPath $_.FullName -Recurse -Force
+                              }
+                          }
+                          if ($kept -gt 0) {
+                              $lines.Add('ok ' + $t.name + ' cleared, kept ' + $kept + ' items')
+                          } else {
+                              $lines.Add('ok ' + $t.name + ' cleared')
+                          }
                       } else {
                           $lines.Add('ok ' + $t.name + ' absent')
                       }

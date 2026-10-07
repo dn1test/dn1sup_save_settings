@@ -196,6 +196,8 @@ module Dn1supSaveSettings
           assert_equal 'reset', cfg['kind']
           assert_equal 'clear_dir', cfg['targets'].first['action'], 'содержимое каталога очищается'
           assert_equal false, cfg['relaunch']
+          assert_equal ['dn1sup_save_settings', 'dn1sup_save_settings.rb'],
+                       cfg['targets'].first['keep'], 'собственные файлы расширения исключены из очистки'
 
           error = nil
           begin
@@ -220,6 +222,54 @@ module Dn1supSaveSettings
           assert File.file?(File.join(dir2, 'staged', 'local', 'PrivatePreferences.json')),
                  'staged заполнен для copy'
           assert_equal 'restore', DeferredApply.state['kind']
+
+          DeferredApply.cancel!
+        ensure
+          clear_env!
+        end
+      end
+    end
+
+    test 'deferred: сброс плагинов сохраняет файлы самого расширения (PS-скрипт)' do
+      skip('тест только для Windows') unless Gem.win_platform?
+
+      Dir.mktmpdir do |root|
+        roaming, _local, _store = with_env(root)
+        begin
+          plugins_dir = File.join(roaming, 'Plugins')
+          FileUtils.mkdir_p(File.join(plugins_dir, 'other_plugin'))
+          File.write(File.join(plugins_dir, 'other.rb'), '# other')
+          File.write(File.join(plugins_dir, 'dn1sup_save_settings.rb'), '# registrar')
+          FileUtils.mkdir_p(File.join(plugins_dir, 'dn1sup_save_settings'))
+          File.write(File.join(plugins_dir, 'dn1sup_save_settings', 'main.rb'), '# package')
+
+          target = Paths::TARGETS.find { |t| t[:key] == 'plugins' }
+          dir = DeferredApply.arm_reset!(target, relaunch: false, spawn_process: false)
+
+          # PID уже завершившегося процесса: скрипт не ждёт SketchUp и сразу
+          # применяет задачу — так же, как после реального закрытия.
+          child = Process.spawn('cmd.exe', '/c', 'exit')
+          Process.waitpid(child)
+
+          ps = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
+                         'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+          ran = system(ps, '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                       '-File', File.join(dir, DeferredApply::SCRIPT_NAME),
+                       '-SuPid', child.to_s, '-PendingDir', dir,
+                       out: File::NULL, err: File::NULL)
+          assert ran, 'PS-скрипт запустился и отработал'
+
+          result = DeferredApply.last_result
+          assert result, 'результат написан в result.txt'
+          assert_equal 'ok', result['status'], "статус ok: #{result['lines'].join('; ')}"
+          assert result['lines'].include?('ok Plugins cleared, kept 2 items'),
+                 "сохранённые файлы отмечены в результате: #{result['lines'].join('; ')}"
+
+          assert !File.exist?(File.join(plugins_dir, 'other.rb')), 'чужой файл удалён'
+          assert !File.directory?(File.join(plugins_dir, 'other_plugin')), 'чужая папка удалена'
+          assert File.file?(File.join(plugins_dir, 'dn1sup_save_settings.rb')), 'регистратор сохранён'
+          assert File.file?(File.join(plugins_dir, 'dn1sup_save_settings', 'main.rb')),
+                 'папка пакета сохранена'
 
           DeferredApply.cancel!
         ensure

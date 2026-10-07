@@ -450,7 +450,7 @@ onMounted(loadState)
       <button
         class="ss-btn-ghost !px-2.5 !py-1 !text-[11px]"
         :disabled="!state.tarOk || !!state.busy || !resetTargetsState.plugins"
-        title="Удалить все установленные расширения: папка Plugins будет очищена сразу после закрытия SketchUp (перед этим — принудительная резервная копия)"
+        title="Удалить все установленные расширения, кроме самого Save Settings: папка Plugins будет очищена сразу после закрытия SketchUp (перед этим — принудительная резервная копия)"
         @click="openReset('plugins')"
       >
         <PackageX :size="12" />
@@ -585,7 +585,8 @@ onMounted(loadState)
         <p class="text-xs leading-relaxed">
           <template v-if="resetModal.key === 'plugins'">
             Содержимое папки <span class="font-mono text-slate-600 dark:text-slate-300">Plugins</span>
-            будет очищено: все установленные расширения будут удалены.
+            будет очищено: все установленные расширения будут удалены,
+            кроме самого Save Settings.
           </template>
           <template v-else>
             Файл <span class="font-mono text-slate-600 dark:text-slate-300">PrivatePreferences.json</span>
@@ -610,8 +611,9 @@ onMounted(loadState)
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
           <span>
-            Само расширение Save Settings тоже будет удалено и пропадёт из меню SketchUp.
-            Верните расширения установкой .rbz или распаковкой созданной копии в папку Plugins.
+            Будут удалены все установленные расширения, кроме самого Save Settings —
+            оно останется на месте и в меню SketchUp. Вернуть остальные расширения можно
+            восстановлением созданной копии (папка Plugins) в SketchUp.
           </span>
         </div>
 

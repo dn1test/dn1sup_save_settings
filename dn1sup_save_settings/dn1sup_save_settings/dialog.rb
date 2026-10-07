@@ -232,6 +232,8 @@ module Dn1supSaveSettings
     # param: {key: 'private_prefs'|'plugins', relaunch: true|false} — сброс
     # цели к заводскому состоянию (подтверждение — в интерфейсе). Перед сбросом
     # ПРИНУДИТЕЛЬНО создаётся резервная копия: без неё сброс не выполняется.
+    # При сбросе плагинов собственные файлы расширения не удаляются
+    # (keep в DeferredApply.arm_reset!) — Save Settings остаётся в меню.
     # Применение отложенное — сразу после закрытия SketchUp
     # (см. DeferredApply.arm_reset!).
     def reset_target(dlg, param)
