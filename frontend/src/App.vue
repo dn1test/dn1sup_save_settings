@@ -229,13 +229,6 @@ onMounted(loadState)
         </p>
       </div>
       <div class="ml-auto flex items-center gap-1">
-        <button class="ss-btn-ghost !px-2.5 !py-1.5 text-xs" :disabled="!state.tarOk" title="Импортировать zip-архив с диска" @click="importZip">
-          <Upload :size="14" />
-          Импорт zip
-        </button>
-        <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Открыть папку резервных копий" @click="openBackupsFolder">
-          <FolderOpen :size="16" />
-        </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Обновить сведения" @click="loadState">
           <RotateCw :size="15" />
         </button>
@@ -447,7 +440,7 @@ onMounted(loadState)
       </section>
     </main>
 
-    <!-- Подвал: сброс к заводским настройкам -->
+    <!-- Подвал: слева сброс к заводским настройкам, справа импорт и папка копий -->
     <footer class="flex items-center gap-1.5 px-4 py-1.5 border-t border-slate-200 dark:border-slate-800">
       <span class="text-[10px] text-slate-400 mr-1">Сброс к заводским настройкам:</span>
       <button
@@ -468,6 +461,15 @@ onMounted(loadState)
         <PackageX :size="12" />
         Сброс плагинов
       </button>
+      <div class="ml-auto flex items-center gap-1">
+        <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px]" :disabled="!state.tarOk" title="Импортировать zip-архив с диска" @click="importZip">
+          <Upload :size="13" />
+          Импорт zip
+        </button>
+        <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Открыть папку резервных копий" @click="openBackupsFolder">
+          <FolderOpen :size="15" />
+        </button>
+      </div>
     </footer>
 
     <!-- Модал справки -->

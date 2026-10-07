@@ -85,7 +85,7 @@ defineEmits(['close'])
       <section class="space-y-1">
         <h4 class="text-xs font-semibold text-slate-800 dark:text-slate-100">Импорт zip</h4>
         <p>
-          Кнопка <span class="font-semibold">«Импорт zip»</span> в шапке добавляет в историю архив с диска —
+          Кнопка <span class="font-semibold">«Импорт zip»</span> внизу справа добавляет в историю архив с диска —
           например, перенесённый с другого компьютера.
         </p>
       </section>
