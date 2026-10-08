@@ -111,8 +111,8 @@ module Dn1supSaveSettings
       dlg = track_dialog(UI::HtmlDialog.new(
                            dialog_title: window_title,
                            preferences_key: 'dn1sup_save_settings_dialog',
-                           width: 800, height: 660,
-                           min_width: 800, max_width: 800,
+                           width: 900, height: 660,
+                           min_width: 900, max_width: 900,
                            min_height: 520,
                            resizable: true,
                            style: UI::HtmlDialog::STYLE_DIALOG

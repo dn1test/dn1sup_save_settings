@@ -31,7 +31,7 @@ unless _registered
   begin
     ext = SketchupExtension.new("DN1Sup Save Settings", File.join('dn1sup_save_settings', 'main'))
     ext.description = "Сохранение параметров SketchUp в zip-архив и восстановление из архива; сброс интерфейса и плагинов к заводским настройкам; история сохранений с датами"
-    ext.version     = '0.11.0'
+    ext.version     = '0.12.0'
     ext.creator     = "DN1Sup"
     ext.copyright   = '2026 DN1Sup <dn1codegen@gmail.com> (MIT)'
     Sketchup.register_extension(ext, true) # true = загружать при старте SketchUp
