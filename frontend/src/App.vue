@@ -1,13 +1,13 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import {
-  Archive, ArchiveRestore, CheckCircle2, CircleHelp, Clock3, Eye, FileText, FolderOpen,
+  Archive, ArchiveRestore, CheckCircle2, CircleHelp, Clock3, Eraser, Eye, FileText, FolderOpen,
   Loader2, Moon, PackageX, Pen, RotateCw, Save, Sun, Trash2, TriangleAlert, Upload, X
 } from 'lucide-vue-next'
 import {
   state, isMock, toast, loadState, createBackup, restoreBackup, deleteBackup,
   importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, updateFromDev,
-  chooseArchiveDir, resetArchiveDir, cancelPendingRestore, dismissRestoreResult, resetTarget
+  chooseArchiveDir, resetArchiveDir, cancelPendingRestore, dismissRestoreResult, resetTargets
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
 import Modal from './components/Modal.vue'
@@ -155,11 +155,17 @@ function doDelete() {
 }
 
 // -- сброс к заводским настройкам -------------------------------------------------
-// resetModal: { key: 'private_prefs' | 'plugins', relaunch }. Применение —
-// отложенное (после закрытия SketchUp), перед сбросом Ruby принудительно
-// создаёт резервную копию.
+// resetModal: { keys: ['private_prefs' | 'plugins', …] }. Применение —
+// отложенное (сразу после закрытия SketchUp: он закроется сам и запустится
+// снова), перед сбросом Ruby принудительно создаёт резервную копию.
+// Пока сброс запланирован (pendingActive), все кнопки сброса заблокированы —
+// и в интерфейсе, и на стороне Ruby.
 
 const resetModal = ref(null)
+
+// Единая блокировка всех кнопок сброса: busy-операция или уже запланированный
+// сброс (после нажатия любой кнопки — до применения или отмены).
+const resetBlocked = computed(() => !state.tarOk || !!state.busy || pendingActive.value)
 
 const resetTargetsState = computed(() => ({
   private_prefs: state.targets.find(t => t.key === 'private_prefs')?.exists,
@@ -167,22 +173,25 @@ const resetTargetsState = computed(() => ({
 }))
 
 const canResetNow = computed(() =>
-  state.tarOk && !state.busy && !!resetModal.value
+  state.tarOk && !state.busy && !pendingActive.value && !!resetModal.value
 )
 
-const resetTitle = computed(() =>
-  resetModal.value?.key === 'plugins' ? 'Сброс плагинов?' : 'Сброс интерфейса?'
-)
+const resetIsAll = computed(() => (resetModal.value?.keys || []).length > 1)
 
-function openReset(key) {
-  resetModal.value = { key, relaunch: state.restoreRelaunch !== false }
+const resetTitle = computed(() => {
+  if (resetIsAll.value) return 'Сбросить всё?'
+  return resetModal.value?.keys?.[0] === 'plugins' ? 'Сброс плагинов?' : 'Сброс интерфейса?'
+})
+
+function openReset(keys) {
+  resetModal.value = { keys: Array.isArray(keys) ? keys : [keys] }
 }
 
 function doReset() {
   const m = resetModal.value
   if (!m) return
   resetModal.value = null
-  resetTarget(m.key, m.relaunch)
+  resetTargets(m.keys)
 }
 
 // -- лог архивации ------------------------------------------------------------------
@@ -442,27 +451,36 @@ onMounted(loadState)
 
     <!-- Подвал: слева сброс к заводским настройкам, справа импорт и папка копий -->
     <footer class="flex items-center gap-1.5 px-4 py-1.5 border-t border-slate-200 dark:border-slate-800">
-      <span class="text-[10px] text-slate-400 mr-1">Сброс к заводским настройкам:</span>
+      <span class="text-[10px] text-slate-400 mr-1 shrink-0">Сброс:</span>
       <button
-        class="ss-btn-ghost !px-2.5 !py-1 !text-[11px]"
-        :disabled="!state.tarOk || !!state.busy || !resetTargetsState.private_prefs"
-        title="Вернуть вид SketchUp к заводскому: PrivatePreferences.json будет удалён сразу после закрытия SketchUp (перед этим — принудительная резервная копия)"
+        class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
+        :disabled="resetBlocked || !resetTargetsState.private_prefs"
+        title="Вернуть вид SketchUp к заводскому: PrivatePreferences.json будет удалён сразу после закрытия SketchUp (перед этим — принудительная резервная копия). SketchUp закроется и запустится снова автоматически"
         @click="openReset('private_prefs')"
       >
         <RotateCw :size="12" />
         Сброс интерфейса
       </button>
       <button
-        class="ss-btn-ghost !px-2.5 !py-1 !text-[11px]"
-        :disabled="!state.tarOk || !!state.busy || !resetTargetsState.plugins"
-        title="Удалить все установленные расширения, кроме самого Save Settings: папка Plugins будет очищена сразу после закрытия SketchUp (перед этим — принудительная резервная копия)"
+        class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
+        :disabled="resetBlocked || !resetTargetsState.plugins"
+        title="Удалить все установленные расширения, кроме самого Save Settings: папка Plugins будет очищена сразу после закрытия SketchUp (перед этим — принудительная резервная копия). SketchUp закроется и запустится снова автоматически"
         @click="openReset('plugins')"
       >
         <PackageX :size="12" />
         Сброс плагинов
       </button>
-      <div class="ml-auto flex items-center gap-1">
-        <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px]" :disabled="!state.tarOk" title="Импортировать zip-архив с диска" @click="importZip">
+      <button
+        class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
+        :disabled="resetBlocked || !resetTargetsState.private_prefs || !resetTargetsState.plugins"
+        title="Сбросить и интерфейс, и плагины: PrivatePreferences.json будет удалён, папка Plugins очищена (кроме самого Save Settings). SketchUp закроется и запустится снова автоматически"
+        @click="openReset(['private_prefs', 'plugins'])"
+      >
+        <Eraser :size="12" />
+        Сбросить всё
+      </button>
+      <div class="ml-auto flex items-center gap-1 shrink-0">
+        <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap" :disabled="!state.tarOk" title="Импортировать zip-архив с диска" @click="importZip">
           <Upload :size="13" />
           Импорт zip
         </button>
@@ -597,7 +615,15 @@ onMounted(loadState)
     <Modal :open="!!resetModal" :title="resetTitle" max-width="max-w-md" @close="resetModal = null">
       <div v-if="resetModal" class="space-y-2.5">
         <p class="text-xs leading-relaxed">
-          <template v-if="resetModal.key === 'plugins'">
+          <template v-if="resetIsAll">
+            Файл <span class="font-mono text-slate-600 dark:text-slate-300">PrivatePreferences.json</span>
+            будет удалён: вид SketchUp (панели инструментов, окна, раскладка) вернётся
+            к заводскому. Содержимое папки
+            <span class="font-mono text-slate-600 dark:text-slate-300">Plugins</span>
+            будет очищено: все установленные расширения будут удалены,
+            кроме самого Save Settings.
+          </template>
+          <template v-else-if="resetModal.keys[0] === 'plugins'">
             Содержимое папки <span class="font-mono text-slate-600 dark:text-slate-300">Plugins</span>
             будет очищено: все установленные расширения будут удалены,
             кроме самого Save Settings.
@@ -620,7 +646,7 @@ onMounted(loadState)
         </div>
 
         <div
-          v-if="resetModal.key === 'plugins'"
+          v-if="resetModal.keys.includes('plugins')"
           class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
@@ -632,20 +658,14 @@ onMounted(loadState)
         </div>
 
         <div
-          v-if="pendingActive"
           class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
-          <span>Уже запланирована другая отложенная операция — сброс заменит её.</span>
-        </div>
-
-        <label class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
-          <input v-model="resetModal.relaunch" type="checkbox" class="accent-brand-500 w-3.5 h-3.5 mt-0.5 shrink-0">
-          <span class="text-xs leading-snug">
-            Запустить SketchUp после применения
-            <span class="block text-[10px] text-slate-400">Иначе откройте SketchUp вручную</span>
+          <span>
+            После подтверждения <span class="font-semibold">SketchUp будет закрыт и запущен снова</span>
+            автоматически. Если модель не сохранена — SketchUp предложит сохранить изменения.
           </span>
-        </label>
+        </div>
       </div>
       <template #footer>
         <button class="ss-btn-ghost" @click="resetModal = null">Отмена</button>

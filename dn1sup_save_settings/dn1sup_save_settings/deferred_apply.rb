@@ -57,18 +57,25 @@ module Dn1supSaveSettings
                            auto_backup: auto_backup, spawn_process: spawn_process)
     end
 
-    # Подготовка сброса цели к заводскому состоянию (после закрытия SketchUp):
-    # файл настроек будет удалён, содержимое каталога — очищено. Резервную
-    # копию перед сбросом создаёт вызывающий код (принудительно).
+    # Подготовка сброса целей к заводскому состоянию (после закрытия SketchUp):
+    # файл настроек будет удалён, содержимое каталога — очищено. Принимает
+    # одну цель или массив («Сбросить всё»). Резервную копию перед сбросом
+    # создаёт вызывающий код (принудительно).
     # При сбросе плагинов из очистки исключаются собственные файлы
     # расширения (keep) — оно остаётся в меню после сброса.
     def arm_reset!(target, relaunch: true, spawn_process: true)
-      action = RESET_ACTION_BY_KIND.fetch(target[:kind]) do
-        raise Error, "Неподдерживаемый вид цели для сброса: #{target[:kind]}"
+      # Hash в Array не оборачивается, а разбирается на пары — только явная
+      # проверка вида.
+      targets = target.is_a?(Array) ? target : [target]
+      entries = targets.map do |t|
+        action = RESET_ACTION_BY_KIND.fetch(t[:kind]) do
+          raise Error, "Неподдерживаемый вид цели для сброса: #{t[:kind]}"
+        end
+        entry = { target: t, action: action }
+        entry[:keep] = self_keep_names if action == 'clear_dir' && t[:key] == 'plugins'
+        entry
       end
-      entry = { target: target, action: action }
-      entry[:keep] = self_keep_names if action == 'clear_dir' && target[:key] == 'plugins'
-      arm_entries([entry], kind: 'reset', archive: '',
+      arm_entries(entries, kind: 'reset', archive: '',
                   relaunch: relaunch, auto_backup: false, spawn_process: spawn_process)
     end
 

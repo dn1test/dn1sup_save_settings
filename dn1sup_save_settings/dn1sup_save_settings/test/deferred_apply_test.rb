@@ -230,6 +230,34 @@ module Dn1supSaveSettings
       end
     end
 
+    test 'deferred: arm_reset! массива целей («Сбросить всё»)' do
+      skip('тест только для Windows') unless Gem.win_platform?
+
+      Dir.mktmpdir do |root|
+        _roaming, _local, _store = with_env(root)
+        begin
+          targets = %w[private_prefs plugins].map { |key| Paths::TARGETS.find { |t| t[:key] == key } }
+          dir = DeferredApply.arm_reset!(targets, relaunch: true, spawn_process: false)
+
+          cfg = JSON.parse(File.read(File.join(dir, DeferredApply::PENDING_FILE)))
+          assert_equal 'reset', cfg['kind']
+          assert_equal ['PrivatePreferences.json', 'Plugins'],
+                       cfg['targets'].map { |t| t['name'] }, 'обе цели в pending.json'
+          assert_equal %w[delete_file clear_dir],
+                       cfg['targets'].map { |t| t['action'] }, 'действия по виду цели'
+          assert_equal ['dn1sup_save_settings', 'dn1sup_save_settings.rb'],
+                       cfg['targets'].last['keep'], 'плагины чистятся с keep расширения'
+          assert cfg['targets'].first['keep'].nil?, 'файлу настроек keep не нужен'
+          assert_equal true, cfg['relaunch']
+          assert_equal 'reset', DeferredApply.state['kind']
+
+          DeferredApply.cancel!
+        ensure
+          clear_env!
+        end
+      end
+    end
+
     test 'deferred: сброс плагинов сохраняет файлы самого расширения (PS-скрипт)' do
       skip('тест только для Windows') unless Gem.win_platform?
 

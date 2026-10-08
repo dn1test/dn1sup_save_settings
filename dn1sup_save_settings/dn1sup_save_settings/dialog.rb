@@ -237,36 +237,66 @@ module Dn1supSaveSettings
     # ПРИНУДИТЕЛЬНО создаётся резервная копия: без неё сброс не выполняется.
     # При сбросе плагинов собственные файлы расширения не удаляются
     # (keep в DeferredApply.arm_reset!) — Save Settings остаётся в меню.
-    # Применение отложенное — сразу после закрытия SketchUp
-    # (см. DeferredApply.arm_reset!).
+    # Сброс целей к заводскому состоянию: param — {key: 'plugins'} или
+    # {keys: ['private_prefs', 'plugins']}. Применение отложенное — отсоединённый
+    # helper выполняет его сразу после закрытия SketchUp и запускает его снова
+    # (см. DeferredApply.arm_reset!). Повторный сброс до применения блокируется:
+    # новый arm заменил бы запланированную задачу.
     def reset_target(dlg, param)
       payload = parse_json(param)
-      key = payload['key'].to_s
-      target = Paths::TARGETS.find { |t| t[:key] == key }
-      unless target && RESETTABLE_KEYS.include?(key)
-        push_result(dlg, 'error', 'message' => "Сброс «#{key}» не поддерживается")
+      keys = Array(payload['keys'] || payload['key']).map(&:to_s).uniq
+      targets = keys.map do |key|
+        target = Paths::TARGETS.find { |t| t[:key] == key }
+        unless target && RESETTABLE_KEYS.include?(key)
+          push_result(dlg, 'error', 'message' => "Сброс «#{key}» не поддерживается")
+          return
+        end
+        target
+      end
+
+      pending = DeferredApply.state
+      if pending && pending['from_current_session'] && !pending['result']
+        push_result(dlg, 'error',
+                    'message' => 'Сброс уже запланирован — дождитесь перезапуска SketchUp или отмените его в баннере')
         return
       end
 
-      path = Paths.resolve(target)
-      exists = target[:kind] == 'file' ? File.file?(path) : File.directory?(path)
-      unless exists
-        push_result(dlg, 'error', 'message' => "#{target[:label]}: нечего сбрасывать — путь не найден")
+      missing = targets.reject do |t|
+        path = Paths.resolve(t)
+        t[:kind] == 'file' ? File.file?(path) : File.directory?(path)
+      end
+      unless missing.empty?
+        push_result(dlg, 'error',
+                    'message' => "#{missing.map { |t| t[:label] }.join(', ')}: нечего сбрасывать — путь не найден")
         return
       end
 
+      labels = targets.map { |t| t[:label] }
       begin
-        entry = Backup.create!(comment: "Автоматически перед сбросом: #{target[:label]}",
-                               keys: [key], kind: 'auto')
-        DeferredApply.arm_reset!(target, relaunch: payload['relaunch'] != false)
+        entry = Backup.create!(comment: "Автоматически перед сбросом: #{labels.join(', ')}",
+                               keys: keys, kind: 'auto')
+        DeferredApply.arm_reset!(targets, relaunch: true)
       rescue Error => e
-        Log.exception(e, "сброс цели:#{key}")
+        Log.exception(e, "сброс целей:#{keys.join(',')}")
         push_result(dlg, 'error', 'message' => e.message)
         return
       end
 
-      push_result(dlg, 'reset_armed', 'label' => target[:label], 'backup_file' => entry['file'])
+      push_result(dlg, 'reset_armed', 'labels' => labels, 'backup_file' => entry['file'])
       push_state(dlg)
+      schedule_quit_for_reset!
+    end
+
+    # Перезагрузка после подготовки сброса: пауза, чтобы тост «Сброс
+    # подготовлен…» и баннер отложенной задачи успели отрисоваться, затем
+    # штатный выход — при несохранённой модели SketchUp покажет диалог
+    # сохранения (отказ возможен, тогда сброс применится при фактическом
+    # закрытии), а helper запустит SketchUp снова.
+    def schedule_quit_for_reset!
+      return unless defined?(UI) && UI.respond_to?(:start_timer)
+      return unless defined?(Sketchup) && Sketchup.respond_to?(:quit)
+
+      UI.start_timer(1.5, false) { Sketchup.quit }
     end
 
     def delete_backup(dlg, param)

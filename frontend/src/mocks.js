@@ -150,9 +150,9 @@ export function applyMockAction(name, params) {
     setTimeout(() => window.pushState({ ...base, archive_dir: '', archive_dir_custom: false }), 150)
   }
   if (name === 'reset_target') {
-    const target = mockTargets.find(t => t.key === params.key)
-    const labels = [target?.label || params.key]
-    window.pushResult('reset_armed', { label: labels[0], backup_file: 'dn1sup_settings_auto_2026-10-06_120001.zip' })
+    const keys = Array.isArray(params.keys) && params.keys.length ? params.keys : [params.key]
+    const labels = keys.map(k => mockTargets.find(t => t.key === k)?.label || k)
+    window.pushResult('reset_armed', { labels, backup_file: 'dn1sup_settings_auto_2026-10-06_120001.zip' })
     setTimeout(() => window.pushState({
       ...mockPayload(),
       pending_restore: {

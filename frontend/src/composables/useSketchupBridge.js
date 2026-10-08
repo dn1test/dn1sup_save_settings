@@ -106,7 +106,10 @@ function emitResult(kind, payload) {
   }
   if (kind === 'reset_armed') {
     state.busy = null
-    toast('ok', `Сброс подготовлен (${payload.label || ''}): применится после закрытия SketchUp. Резервная копия: ${payload.backup_file || ''}`, 8000)
+    const what = Array.isArray(payload.labels) && payload.labels.length
+      ? payload.labels.join(', ')
+      : (payload.label || '')
+    toast('ok', `Сброс подготовлен (${what}): SketchUp будет закрыт и запущен снова. Резервная копия: ${payload.backup_file || ''}`, 8000)
   }
   if (kind === 'archive_dir_set') {
     state.busy = null
@@ -277,16 +280,17 @@ export function resetArchiveDir() {
   callRuby('reset_archive_dir')
 }
 
-/** Сброс цели к заводским настройкам (key: 'private_prefs' | 'plugins').
- *  Ruby принудительно создаёт резервную копию, применение — после закрытия
- *  SketchUp. relaunch — запускать SketchUp после применения. */
-export function resetTarget(key, relaunch = true) {
+/** Сброс целей к заводским настройкам (keys: ['private_prefs', 'plugins', …]).
+ *  Ruby принудительно создаёт резервную копию, применение — сразу после
+ *  закрытия SketchUp; SketchUp закрывается сам и запускается снова. */
+export function resetTargets(keys) {
+  const list = Array.isArray(keys) ? keys : [keys]
   if (isMock) {
-    applyMockAction('reset_target', { key, relaunch })
+    applyMockAction('reset_target', { keys: list })
     return
   }
   state.busy = 'reset'
-  callRubyJson('reset_target', { key, relaunch: !!relaunch })
+  callRubyJson('reset_target', { keys: list })
 }
 
 export function revealBackup(file) {
