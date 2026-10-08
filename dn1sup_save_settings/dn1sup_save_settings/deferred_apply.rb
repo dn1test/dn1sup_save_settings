@@ -1,25 +1,27 @@
 # frozen_string_literal: true
 # =============================================================================
 # dn1sup_save_settings/deferred_apply.rb — отложенное применение изменений
-# настроек: восстановление файлов из архива (arm!) и сброс к заводскому
+# настроек: восстановление из архива (arm!) и сброс к заводскому
 # состоянию (arm_reset!).
 #
 # SketchUp держит настройки в памяти и ПЕРЕЗАПИСЫВАЕТ оба JSON-файла при
-# выходе (и по отдельным событиям сессии), а файлы плагинов держит
-# открытыми, поэтому менять их в запущенном SketchUp бессмысленно —
-# изменения затираются или блокируются. arm! складывает файл-цели архива
-# в pending-папку хранилища и запускает ОТСОЕДИНЁННЫЙ PowerShell-скрипт,
-# который:
-#   1) запоминает путь SketchUp.exe (пока процесс жив);
-#   2) опросом Get-Process дожидается закрытия SketchUp (именно после
-#      выхода файлы на диске — финальное состояние);
+# выходе, а файлы плагинов (нативные .so/.dll) держит открытыми, поэтому
+# менять что-либо в запущенном SketchUp бессмысленно — изменения затираются
+# или блокируются. arm! складывает цели (файлы И каталоги) в pending-папку
+# хранилища и запускает ОТСОЕДИНЁННЫЙ PowerShell-скрипт, который:
+#   1) запоминает путь и имя процесса SketchUp (пока жив);
+#   2) опросом Get-Process дожидается закрытия ВСЕХ экземпляров SketchUp —
+#      второй запущенный экземпляр держал бы те же файлы;
 #   3) делает страховочную копию текущих файлов в pre_restore_<штамп>/;
-#   4) выполняет действия по каждой цели: copy — копирует файл из staged
-#      в каталоги SketchUp (Local/Roaming); delete_file — удаляет файл
-#      (сброс интерфейса); clear_dir — очищает содержимое каталога
-#      (сброс плагинов: сам каталог остаётся, а элементы из списка keep
-#      цели — файлы самого расширения — не удаляются);
-#   5) пишет result.txt (ok|error) и опционально запускает SketchUp снова.
+#   4) выполняет действия по каждой цели: copy — копирует staged-файл или
+#      каталог поверх текущего (каталог — слиянием, по элементам), файл
+#      настроек перезаписывается; delete_file — удаляет файл (сброс
+#      интерфейса); clear_dir — очищает содержимое каталога (сброс
+#      плагинов: сам каталог остаётся, а элементы из списка keep — файлы
+#      самого расширения — не удаляются). Занятые файлы не валят всю цель:
+#      каждый элемент в своём try/catch, итог честный (fail с именами);
+#   5) пишет result.txt (ok|error), удаляет staged при успехе и опционально
+#      запускает SketchUp снова.
 # Отмена (cancel!) удаляет pending-папку: скрипт, не найдя pending.json,
 # выходит, ничего не меняя. Повторный arm!/arm_reset! пересоздаёт папку.
 # =============================================================================
@@ -150,7 +152,7 @@ module Dn1supSaveSettings
       raise Error, 'Отложенное применение доступно только в Windows' unless win?
 
       prepared = Array(entries).map { |e| normalize_entry(e) }
-      raise Error, 'Нет файлов настроек для отложенного применения' if prepared.empty?
+      raise Error, 'Нет целей для отложенного применения' if prepared.empty?
 
       dir = pending_dir
       FileUtils.rm_rf(dir) # повторный arm!/arm_reset! заменяет подготовленную задачу
@@ -163,7 +165,9 @@ module Dn1supSaveSettings
         t = entry[:target]
         dest = File.join(staged, t[:scope].to_s, t[:name])
         FileUtils.mkdir_p(File.dirname(dest))
-        FileUtils.cp(entry[:src], dest)
+        # Каталог копируется целиком (со всем содержимым) — при применении
+        # helper зальёт его поверх текущего, файл — перезапишет.
+        t[:kind] == 'dir' ? FileUtils.cp_r(entry[:src], dest) : FileUtils.cp(entry[:src], dest)
       end
 
       config = {
@@ -180,13 +184,15 @@ module Dn1supSaveSettings
         'targets'          => prepared.map do |entry|
           t = entry[:target]
           item = { 'key' => t[:key], 'scope' => t[:scope].to_s, 'name' => t[:name],
-                   'label' => t[:label].to_s, 'action' => entry[:action] }
+                   'label' => t[:label].to_s, 'kind' => t[:kind].to_s, 'action' => entry[:action] }
           item['keep'] = entry[:keep] if entry[:keep]
           item
         end
       }
       File.write(File.join(dir, PENDING_FILE), JSON.pretty_generate(config))
-      File.write(File.join(dir, SCRIPT_NAME), SCRIPT)
+      # BOM обязателен: в SCRIPT есть русские сообщения, а Windows PowerShell
+      # 5.1 файл без BOM читает в системной однобайтовой кодировке.
+      File.write(File.join(dir, SCRIPT_NAME), "\uFEFF#{SCRIPT}")
 
       Log.info("Подготовлено отложенное применение: kind=#{kind}, цели=#{prepared.map { |e| e[:target][:name] }.join(', ')}, " \
                "relaunch=#{relaunch}, запуск helper=#{spawn_process}")
@@ -195,9 +201,9 @@ module Dn1supSaveSettings
     end
 
     # Нормализует запись задачи: action по умолчанию 'copy'; копировать можно
-    # только файлы настроек с существующим src, удаление/очистка не требуют
-    # staged-файла. keep (имена внутри очищаемого каталога, которые нельзя
-    # удалять) имеет смысл только для clear_dir.
+    # файлы настроек И каталоги (src должен существовать), удаление/очистка не
+    # требуют staged-копии. keep (имена внутри очищаемого каталога, которые
+    # нельзя удалять) имеет смысл только для clear_dir.
     def normalize_entry(entry)
       action = entry[:action] || 'copy'
       unless %w[copy delete_file clear_dir].include?(action)
@@ -205,11 +211,10 @@ module Dn1supSaveSettings
       end
 
       if action == 'copy'
-        unless entry[:target][:kind] == 'file'
-          raise Error, "Отложенно копировать можно только файлы настроек: #{entry[:target][:name]}"
-        end
+        kind = entry[:target][:kind]
         src = entry[:src].to_s
-        raise Error, 'Нет файлов настроек для отложенного применения' unless File.file?(src)
+        exists = kind == 'dir' ? File.directory?(src) : File.file?(src)
+        raise Error, "Нет исходника для отложенного копирования: #{entry[:target][:name]}" unless exists
 
         { target: entry[:target], action: action, src: src }
       else
@@ -276,37 +281,47 @@ module Dn1supSaveSettings
     end
 
     # -- apply_restore.ps1 -------------------------------------------------------
-    # Только ASCII (кодировка скрипта не важна) и без тернарников/операторов
-    # PS7: в SketchUp используется Windows PowerShell 5.1.
+    # Код скрипта — только ASCII; русские сообщения в строках допустимы:
+    # файл пишется с BOM, PowerShell 5.1 читает его как UTF-8. Без тернарников
+    # и операторов PS7.
     SCRIPT = <<~'PS'
       param(
           [int]$SuPid = 0,
-          [string]$PendingDir = ''
+          [string]$PendingDir = '',
+          [switch]$DontWaitAll
       )
 
       $ErrorActionPreference = 'Continue'
       $pendingFile = Join-Path $PendingDir 'pending.json'
       if (-not (Test-Path -LiteralPath $pendingFile)) { exit 0 }
 
-      # Remember the SketchUp executable while the process still runs.
+      # Remember the SketchUp executable and process name while it still runs.
       $suExe = $null
+      $suName = 'SketchUp'
       $proc = Get-Process -Id $SuPid -ErrorAction SilentlyContinue
       if ($proc) {
           $suExe = $proc.Path
           if (-not $suExe) {
               try { $suExe = $proc.MainModule.FileName } catch { $suExe = $null }
           }
+          if ($proc.ProcessName) { $suName = $proc.ProcessName }
       }
 
-      # Wait for SketchUp to exit: it rewrites the preference files at exit,
-      # so they can only be replaced afterwards. Polling: Wait-Process
-      # -Timeout accepts at most 32767 seconds, we need a full day.
-      $deadline = (Get-Date).AddSeconds(86400)
-      while ((Get-Date) -lt $deadline) {
-          if (-not (Get-Process -Id $SuPid -ErrorAction SilentlyContinue)) { break }
-          Start-Sleep -Milliseconds 500
+      # Wait until EVERY instance is closed (not only the armed one): SketchUp
+      # rewrites preferences at exit and keeps plugin files locked, so a second
+      # running instance would break both clearing and copying. Polling:
+      # Wait-Process -Timeout accepts at most 32767 seconds, we need a full day.
+      # DontWaitAll — тестовый режим: применять не дожидаясь SketchUp.
+      if (-not $DontWaitAll) {
+          $deadline = (Get-Date).AddSeconds(86400)
+          while ((Get-Date) -lt $deadline) {
+              $alive = @(Get-Process -Name $suName -ErrorAction SilentlyContinue)
+              if ($alive.Count -eq 0) { break }
+              Start-Sleep -Milliseconds 500
+          }
+          $stillAlive = @(Get-Process -Name $suName -ErrorAction SilentlyContinue)
+          if ($stillAlive.Count -gt 0) { exit 0 }
       }
-      if (Get-Process -Id $SuPid -ErrorAction SilentlyContinue) { exit 0 }
       if (-not (Test-Path -LiteralPath $pendingFile)) { exit 0 }
 
       $cfg = $null
@@ -321,11 +336,16 @@ module Dn1supSaveSettings
               $stash = Join-Path $PendingDir ('pre_restore_' + (Get-Date -Format 'yyyy-MM-dd_HHmmss'))
               New-Item -ItemType Directory -Force -Path $stash | Out-Null
               foreach ($t in @($cfg.targets)) {
-                  $root = $cfg.roots.($t.scope)
-                  $dst = Join-Path $root $t.name
-                  if (Test-Path -LiteralPath $dst) {
-                      Copy-Item -LiteralPath $dst -Destination (Join-Path $stash $t.name) -Recurse -Force
-                      $lines.Add('backup ' + $t.name)
+                  try {
+                      $root = $cfg.roots.($t.scope)
+                      $dst = Join-Path $root $t.name
+                      if (Test-Path -LiteralPath $dst) {
+                          Copy-Item -LiteralPath $dst -Destination (Join-Path $stash $t.name) -Recurse -Force -ErrorAction Stop
+                          $lines.Add('backup ' + $t.name)
+                      }
+                  } catch {
+                      $ok = $false
+                      $lines.Add('fail backup ' + $t.name + ' : ' + $_.Exception.Message)
                   }
               }
           }
@@ -334,11 +354,13 @@ module Dn1supSaveSettings
               try {
                   $root = $cfg.roots.($t.scope)
                   $dst = Join-Path $root $t.name
+                  $kind = 'file'
+                  if ($t.PSObject.Properties['kind'] -and $t.kind) { $kind = [string]$t.kind }
                   $action = 'copy'
                   if ($t.PSObject.Properties['action'] -and $t.action) { $action = [string]$t.action }
                   if ($action -eq 'delete_file') {
                       if (Test-Path -LiteralPath $dst) {
-                          Remove-Item -LiteralPath $dst -Force
+                          Remove-Item -LiteralPath $dst -Force -ErrorAction Stop
                           $lines.Add('ok ' + $t.name + ' deleted')
                       } else {
                           $lines.Add('ok ' + $t.name + ' absent')
@@ -350,14 +372,24 @@ module Dn1supSaveSettings
                           $keep = @()
                           if ($t.PSObject.Properties['keep']) { $keep = @($t.keep) }
                           $kept = 0
+                          $busy = New-Object System.Collections.Generic.List[string]
                           Get-ChildItem -LiteralPath $dst -Force | ForEach-Object {
-                              if ($keep -contains $_.Name) {
+                              $itemPath = $_.FullName
+                              $itemName = $_.Name
+                              if ($keep -contains $itemName) {
                                   $kept++
                               } else {
-                                  Remove-Item -LiteralPath $_.FullName -Recurse -Force
+                                  try {
+                                      Remove-Item -LiteralPath $itemPath -Recurse -Force -ErrorAction Stop
+                                  } catch {
+                                      $busy.Add($itemName)
+                                  }
                               }
                           }
-                          if ($kept -gt 0) {
+                          if ($busy.Count -gt 0) {
+                              $ok = $false
+                              $lines.Add('fail ' + $t.name + ' : занято другим процессом, не удалено: ' + ($busy -join ', '))
+                          } elseif ($kept -gt 0) {
                               $lines.Add('ok ' + $t.name + ' cleared, kept ' + $kept + ' items')
                           } else {
                               $lines.Add('ok ' + $t.name + ' cleared')
@@ -365,11 +397,42 @@ module Dn1supSaveSettings
                       } else {
                           $lines.Add('ok ' + $t.name + ' absent')
                       }
+                  } elseif ($kind -eq 'dir') {
+                      # Directory restore: merge item by item (Copy-Item of the
+                      # source directory itself would nest it inside the target).
+                      $src = Join-Path (Join-Path $PendingDir 'staged') (Join-Path $t.scope $t.name)
+                      if (-not (Test-Path -LiteralPath $src)) {
+                          $ok = $false
+                          $lines.Add('fail ' + $t.name + ' : нет подготовленной копии')
+                      } else {
+                          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+                          $busy = New-Object System.Collections.Generic.List[string]
+                          Get-ChildItem -LiteralPath $src -Force | ForEach-Object {
+                              $itemPath = $_.FullName
+                              $itemName = $_.Name
+                              try {
+                                  Copy-Item -LiteralPath $itemPath -Destination (Join-Path $dst $itemName) -Recurse -Force -ErrorAction Stop
+                              } catch {
+                                  $busy.Add($itemName)
+                              }
+                          }
+                          if ($busy.Count -gt 0) {
+                              $ok = $false
+                              $lines.Add('fail ' + $t.name + ' : занято другим процессом, не скопировано: ' + ($busy -join ', '))
+                          } else {
+                              $lines.Add('ok ' + $t.name)
+                          }
+                      }
                   } else {
                       $src = Join-Path (Join-Path $PendingDir 'staged') (Join-Path $t.scope $t.name)
-                      New-Item -ItemType Directory -Force -Path $root | Out-Null
-                      Copy-Item -LiteralPath $src -Destination $dst -Force
-                      $lines.Add('ok ' + $t.name)
+                      if (-not (Test-Path -LiteralPath $src)) {
+                          $ok = $false
+                          $lines.Add('fail ' + $t.name + ' : нет подготовленной копии')
+                      } else {
+                          New-Item -ItemType Directory -Force -Path $root | Out-Null
+                          Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop
+                          $lines.Add('ok ' + $t.name)
+                      }
                   }
               } catch {
                   $ok = $false
@@ -386,6 +449,12 @@ module Dn1supSaveSettings
       $lines.Insert(0, 'finished ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
       $lines.Insert(0, $status)
       Set-Content -LiteralPath (Join-Path $PendingDir 'result.txt') -Value $lines -Encoding UTF8
+
+      # Staged copies can be large (whole directories): keep them only when
+      # something failed, for diagnostics.
+      if ($ok) {
+          Remove-Item -LiteralPath (Join-Path $PendingDir 'staged') -Recurse -Force -ErrorAction SilentlyContinue
+      }
 
       if ($cfg.relaunch -and $suExe -and (Test-Path -LiteralPath $suExe)) {
           Start-Process -FilePath $suExe

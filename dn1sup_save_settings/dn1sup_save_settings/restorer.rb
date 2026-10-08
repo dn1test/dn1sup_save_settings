@@ -4,15 +4,14 @@
 # манифест → (по желанию) автобэкап текущего состояния → распаковка во
 # временную папку → применение.
 #
-# Цели применяются по-разному (SketchUp держит настройки в памяти и
-# перезаписывает их на диск при выходе):
-#   • каталоги (Components, Materials, …) — копируются сразу, вступают в
-#     силу после перезапуска SketchUp;
-#   • файлы настроек (PrivatePreferences.json, SharedPreferences.json) —
-#     НЕ копируются в запущенный SketchUp: он затёр бы их при выходе.
-#     Они уходят в DeferredApply и применяются отсоединённым скриптом сразу
-#     после закрытия SketchUp. defer_files: false — применить сразу
-#     (старое поведение; файл будет перезаписан при выходе SketchUp).
+# Всё применение — ОТЛОЖЕННОЕ (DeferredApply, отсоединённый helper):
+# SketchUp держит настройки в памяти и перезаписывает их при выходе,
+# а файлы плагинов (нативные .so/.dll) держит открытыми — попытка копировать
+# каталоги в работающем SketchUp падает на первом занятом файле (EACCES на
+# загруженной библиотеке). Поэтому и файлы настроек, и каталоги применяются
+# сразу после закрытия SketchUp, после чего он запускается снова.
+# defer_files: false — старое поведение «копировать сразу»: работает для
+# отладки, но каталоги могут восстановиться частично (занятые файлы).
 # =============================================================================
 
 require 'fileutils'
@@ -33,7 +32,9 @@ module Dn1supSaveSettings
     #                         (по умолчанию все записанные в манифесте);
     #   relaunch: true — после отложенного применения запустить SketchUp снова
     #                     (передаётся в DeferredApply);
-    #   defer_files: false — применить файлы настроек сразу, не откладывая;
+    #   defer_files: false — применить сразу, не откладывая (старое поведение;
+    #                  файл настроек будет перезаписан при выходе SketchUp,
+    #                  каталоги — с риском частичного восстановления);
     #   spawn: false — подготовить отложенное применение, но скрипт не
     #                  запускать (тесты).
     def restore!(zip_path, opts = {})
@@ -59,61 +60,13 @@ module Dn1supSaveSettings
                           pending_dir: nil, auto_backup_file: nil)
       result.auto_backup_file = auto_entry['file'] if auto_entry
 
-      defer_files = opts[:defer_files] != false
-      file_targets, dir_targets = wanted.partition { |t| t[:kind] == 'file' }
-
       Dir.mktmpdir('dn1sup_rs_') do |tmp|
         Archiver.extract(zip_path, tmp)
-        dir_targets.each do |t|
-          src = File.join(tmp, t[:scope], t[:name])
-          unless File.exist?(src)
-            result.skipped << t[:name]
-            next
-          end
-          begin
-            copy_over!(src, t)
-            result.restored << t[:name]
-          rescue StandardError => e
-            result.errors << "#{t[:name]}: #{e.message}"
-            Log.exception(e, "восстановление каталога: #{t[:name]}")
-          end
-        end
 
-        if defer_files
-          entries = file_targets.filter_map do |t|
-            src = File.join(tmp, t[:scope], t[:name])
-            if File.file?(src)
-              { target: t, src: src }
-            else
-              result.skipped << t[:name]
-              nil
-            end
-          end
-          unless entries.empty?
-            result.pending_dir = DeferredApply.arm!(
-              entries,
-              archive: File.basename(zip_path.to_s),
-              relaunch: opts[:relaunch] != false,
-              auto_backup: opts[:auto_backup] != false,
-              spawn_process: opts[:spawn] != false
-            )
-            result.deferred.concat(entries.map { |e| e[:target][:name] })
-          end
+        if opts[:defer_files] != false
+          defer_all!(wanted, tmp, result, zip_path, opts)
         else
-          file_targets.each do |t|
-            src = File.join(tmp, t[:scope], t[:name])
-            unless File.exist?(src)
-              result.skipped << t[:name]
-              next
-            end
-            begin
-              copy_over!(src, t)
-              result.restored << t[:name]
-            rescue StandardError => e
-              result.errors << "#{t[:name]}: #{e.message}"
-              Log.exception(e, "восстановление файла: #{t[:name]}")
-            end
-          end
+          apply_now!(wanted, tmp, result)
         end
       end
       Paths.reset_sizes!
@@ -133,8 +86,51 @@ module Dn1supSaveSettings
       Paths::TARGETS.select { |t| wanted_keys.include?(t[:key]) }
     end
 
+    # Обычный сценарий: ВСЕ цели (каталоги и файлы настроек) уходят в
+    # отложенное применение — helper применит их после закрытия SketchUp.
+    def defer_all!(wanted, tmp, result, zip_path, opts)
+      entries = wanted.filter_map do |t|
+        src = File.join(tmp, t[:scope], t[:name])
+        exists = t[:kind] == 'dir' ? File.directory?(src) : File.file?(src)
+        unless exists
+          result.skipped << t[:name]
+          next nil
+        end
+        { target: t, src: src }
+      end
+      return if entries.empty?
+
+      result.pending_dir = DeferredApply.arm!(
+        entries,
+        archive: File.basename(zip_path.to_s),
+        relaunch: opts[:relaunch] != false,
+        auto_backup: opts[:auto_backup] != false,
+        spawn_process: opts[:spawn] != false
+      )
+      result.deferred.concat(entries.map { |e| e[:target][:name] })
+    end
+
+    # Старое поведение (defer_files: false): копировать сразу. Ошибка одной
+    # цели не останавливает остальные.
+    def apply_now!(wanted, tmp, result)
+      wanted.each do |t|
+        src = File.join(tmp, t[:scope], t[:name])
+        unless File.exist?(src)
+          result.skipped << t[:name]
+          next
+        end
+        begin
+          copy_over!(src, t)
+          result.restored << t[:name]
+        rescue StandardError => e
+          result.errors << "#{t[:name]}: #{e.message}"
+          Log.exception(e, "восстановление цели: #{t[:name]}")
+        end
+      end
+    end
+
     # Копирует распакованную цель поверх текущей (каталог — слиянием,
-    # файл — перезаписью). Ошибка отдельной цели не останавливает остальные.
+    # файл — перезаписью).
     def copy_over!(src, target)
       dst = Paths.resolve(target)
       if target[:kind] == 'dir'

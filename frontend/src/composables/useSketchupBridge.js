@@ -86,16 +86,18 @@ function emitResult(kind, payload) {
     const n = (payload.restored || []).length
     const d = (payload.deferred || []).length
     const errs = payload.errors || []
+    const parts = []
+    if (n) parts.push(`Восстановлено сразу: путей ${n} (перезапустите SketchUp)`)
+    if (d) parts.push(`применится после закрытия SketchUp: путей ${d}, затем он запустится снова`)
     if (n || d) {
       state.restartBanner = n > 0
-      const parts = []
-      if (n) parts.push(`Восстановлено путей: ${n} (нужен перезапуск SketchUp)`)
-      if (d) parts.push(`файлов настроек применится автоматически после закрытия SketchUp: ${d}`)
       if (errs.length) {
         toast('err', `${parts.join('; ')}. С ошибками: ${errs.length}. ${errs[0]}`, 8000)
       } else {
         toast('ok', parts.join('; '), 8000)
       }
+    } else if (errs.length) {
+      toast('err', `Ошибка восстановления: ${errs[0]}`, 8000)
     } else {
       toast('err', 'Нечего восстанавливать: в архиве нет выбранных путей', 7000)
     }

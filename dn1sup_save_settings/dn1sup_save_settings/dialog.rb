@@ -111,8 +111,8 @@ module Dn1supSaveSettings
       dlg = track_dialog(UI::HtmlDialog.new(
                            dialog_title: window_title,
                            preferences_key: 'dn1sup_save_settings_dialog',
-                           width: 700, height: 660,
-                           min_width: 700, max_width: 700,
+                           width: 800, height: 660,
+                           min_width: 800, max_width: 800,
                            min_height: 520,
                            resizable: true,
                            style: UI::HtmlDialog::STYLE_DIALOG
@@ -207,8 +207,8 @@ module Dn1supSaveSettings
 
     # param: {file: 'dn1sup_settings_….zip', auto_backup: true,
     #         keys: [...]|null, relaunch: true|false} — подтверждение происходит
-    # в интерфейсе. Файлы настроек (JSON) применяются отложенно — после
-    # закрытия SketchUp (см. DeferredApply).
+    # в интерфейсе. Восстановление целиком отложенное — и файлы настроек, и
+    # каталоги применяются после закрытия SketchUp (см. DeferredApply).
     def restore_backup(dlg, param)
       payload = parse_json(param)
       zip_path = Store.resolve_archive(payload['file'].to_s)

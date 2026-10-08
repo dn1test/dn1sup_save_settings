@@ -34,6 +34,27 @@ module Dn1supSaveSettings
       Paths.reset_sizes!
     end
 
+    # Запуск apply_restore.ps1 БЕЗ окон консоли и без спавна процессов:
+    # SketchUp — GUI-процесс, любой консольный ребёнок (system/Process.spawn)
+    # получает видимое синее окно PowerShell. PID: берём заведомо несуществующий
+    # (helper с -DontWaitAll его только читает через Get-Process — nil).
+    def self.run_helper_script(dir)
+      dead_pid = loop do
+        candidate = rand(4000...99_999)
+        begin
+          Process.kill(0, candidate)
+          nil
+        rescue Errno::ESRCH
+          break candidate
+        end
+      end
+      ps = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
+                     'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      WinProcess.run(ps, '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                     '-File', File.join(dir, DeferredApply::SCRIPT_NAME),
+                     '-SuPid', dead_pid.to_s, '-PendingDir', dir, '-DontWaitAll')
+    end
+
     test 'deferred: arm! готовит pending-папку, cancel! удаляет' do
       skip('тест только для Windows') unless Gem.win_platform?
 
@@ -274,18 +295,8 @@ module Dn1supSaveSettings
           target = Paths::TARGETS.find { |t| t[:key] == 'plugins' }
           dir = DeferredApply.arm_reset!(target, relaunch: false, spawn_process: false)
 
-          # PID уже завершившегося процесса: скрипт не ждёт SketchUp и сразу
-          # применяет задачу — так же, как после реального закрытия.
-          child = Process.spawn('cmd.exe', '/c', 'exit')
-          Process.waitpid(child)
-
-          ps = File.join(ENV['SystemRoot'] || ENV['WINDIR'] || 'C:\\Windows',
-                         'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-          ran = system(ps, '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                       '-File', File.join(dir, DeferredApply::SCRIPT_NAME),
-                       '-SuPid', child.to_s, '-PendingDir', dir,
-                       out: File::NULL, err: File::NULL)
-          assert ran, 'PS-скрипт запустился и отработал'
+          code = run_helper_script(dir)
+          assert code.zero?, "PS-скрипт запустился и отработал (код #{code})"
 
           result = DeferredApply.last_result
           assert result, 'результат написан в result.txt'
@@ -299,6 +310,91 @@ module Dn1supSaveSettings
           assert File.file?(File.join(plugins_dir, 'dn1sup_save_settings', 'main.rb')),
                  'папка пакета сохранена'
 
+          DeferredApply.cancel!
+        ensure
+          clear_env!
+        end
+      end
+    end
+
+    test 'deferred: arm! каталога — staging и слияние (PS-скрипт)' do
+      skip('тест только для Windows') unless Gem.win_platform?
+
+      Dir.mktmpdir do |root|
+        roaming, _local, _store = with_env(root)
+        begin
+          # «Архивный» источник: Materials с новым содержимым и подпапкой.
+          src = File.join(root, 'src', 'Materials')
+          FileUtils.mkdir_p(File.join(src, 'sub'))
+          File.write(File.join(src, 'm1.skm'), 'NEW')
+          File.write(File.join(src, 'sub', 'm2.skm'), 'SUB')
+
+          # Текущее состояние: старый файл и лишний файл, которого в архиве нет
+          # (слияние не должно его удалить).
+          live = File.join(roaming, 'Materials')
+          FileUtils.mkdir_p(live)
+          File.write(File.join(live, 'm1.skm'), 'OLD')
+          File.write(File.join(live, 'extra.txt'), 'EXTRA')
+
+          entry = { target: Paths::TARGETS.find { |t| t[:key] == 'materials' }, src: src }
+          dir = DeferredApply.arm!([entry], relaunch: false, auto_backup: false, spawn_process: false)
+
+          cfg = JSON.parse(File.read(File.join(dir, DeferredApply::PENDING_FILE)))
+          assert_equal 'dir', cfg['targets'].first['kind'], 'kind каталога в pending.json'
+          assert File.directory?(File.join(dir, 'staged', 'roaming', 'Materials')), 'каталог в staged'
+          assert_equal 'NEW', File.read(File.join(dir, 'staged', 'roaming', 'Materials', 'm1.skm'))
+
+          code = run_helper_script(dir)
+          assert code.zero?, "PS-скрипт запустился и отработал (код #{code})"
+
+          result = DeferredApply.last_result
+          assert result, 'результат написан в result.txt'
+          assert_equal 'ok', result['status'], "статус ok: #{result['lines'].join('; ')}"
+          assert result['lines'].include?('ok Materials'), "слияние отмечено: #{result['lines'].join('; ')}"
+
+          assert_equal 'NEW', File.read(File.join(live, 'm1.skm')), 'файл перезаписан из архива'
+          assert_equal 'SUB', File.read(File.join(live, 'sub', 'm2.skm')), 'подпапка добавлена'
+          assert_equal 'EXTRA', File.read(File.join(live, 'extra.txt')), 'слияние не удаляет лишнее'
+
+          assert !File.directory?(File.join(dir, 'staged')), 'staged удалён после успеха'
+          DeferredApply.cancel!
+        ensure
+          clear_env!
+        end
+      end
+    end
+
+    test 'deferred: clear_dir с занятым файлом — честный fail (PS-скрипт)' do
+      skip('тест только для Windows') unless Gem.win_platform?
+
+      Dir.mktmpdir do |root|
+        roaming, _local, _store = with_env(root)
+        begin
+          plugins_dir = File.join(roaming, 'Plugins')
+          FileUtils.mkdir_p(plugins_dir)
+          File.write(File.join(plugins_dir, 'free.rb'), '# free')
+          locked_path = File.join(plugins_dir, 'locked.so')
+          File.write(locked_path, 'native')
+
+          # Держим файл открытым: Remove-Item не сможет его удалить.
+          locked = File.open(locked_path, 'rb')
+          begin
+            target = Paths::TARGETS.find { |t| t[:key] == 'plugins' }
+            dir = DeferredApply.arm_reset!(target, relaunch: false, spawn_process: false)
+
+            run_helper_script(dir)
+
+            result = DeferredApply.last_result
+            assert result, 'результат написан'
+            assert_equal 'error', result['status'], "статус error: #{result['lines'].join('; ')}"
+            fail_line = result['lines'].find { |l| l.start_with?('fail Plugins') }
+            assert fail_line, "есть fail по цели: #{result['lines'].join('; ')}"
+            assert fail_line.include?('locked.so'), "в fail указано имя файла: #{fail_line}"
+            assert File.file?(File.join(plugins_dir, 'locked.so')), 'занятый файл не удалён'
+            assert !File.file?(File.join(plugins_dir, 'free.rb')), 'свободные файлы удалены'
+          ensure
+            locked.close
+          end
           DeferredApply.cancel!
         ensure
           clear_env!

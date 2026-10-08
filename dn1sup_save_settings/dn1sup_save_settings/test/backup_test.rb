@@ -38,13 +38,14 @@ module Dn1supSaveSettings
           File.write(File.join(local, 'PrivatePreferences.json'), '{"pref":"spoiled"}')
 
           result = Restorer.restore!(zip, auto_backup: true, spawn: false)
-          assert_equal ['Materials'], result.restored,
-                       'каталоги применяются сразу'
-          assert_equal ['PrivatePreferences.json', 'SharedPreferences.json'].sort,
-                       result.deferred.sort, 'файлы настроек уходят в отложенное применение'
+          assert result.restored.empty?, 'в работающем SketchUp ничего не применяется сразу'
+          assert_equal ['Materials', 'PrivatePreferences.json', 'SharedPreferences.json'].sort,
+                       result.deferred.sort, 'все цели уходят в отложенное применение'
           assert result.pending_dir && File.directory?(result.pending_dir), 'pending-папка создана'
           assert result.errors.empty?, "ошибки восстановления: #{result.errors.inspect}"
-          assert_equal 'M1', File.read(File.join(roaming, 'Materials', 'm1.skm'))
+          assert_equal 'M1',
+                       File.read(File.join(result.pending_dir, 'staged', 'roaming', 'Materials', 'm1.skm')),
+                       'каталог в staged — из архива'
           assert_equal '{"pref":"spoiled"}', File.read(File.join(local, 'PrivatePreferences.json')),
                        'JSON в запущенном SketchUp не перезаписан — применится после закрытия'
           assert_equal '{"pref":1}',

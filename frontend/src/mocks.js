@@ -61,8 +61,8 @@ export function applyMockAction(name, params) {
   }
   if (name === 'restore_backup') {
     window.pushResult('restore_done', {
-      restored: ['Materials'],
-      deferred: ['PrivatePreferences.json', 'SharedPreferences.json'],
+      restored: [],
+      deferred: ['Materials', 'Plugins', 'PrivatePreferences.json', 'SharedPreferences.json'],
       skipped: ['Templates'],
       errors: [],
       pending_dir: 'C:\\mock\\pending_restore',

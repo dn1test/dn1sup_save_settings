@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 # =============================================================================
 # dn1sup_save_settings/test/restorer_test.rb — восстановление из архива:
-# каталоги применяются сразу, файлы настроек (JSON) уходят в отложенное
-# применение (DeferredApply), defer_files: false возвращает старое поведение
-# (копировать сразу).
+# ВСЕ цели (каталоги и файлы настроек) уходят в отложенное применение
+# (DeferredApply) — в работающем SketchUp файлы плагинов заняты, а настройки
+# он перезаписывает при выходе. defer_files: false возвращает старое
+# поведение (копировать сразу).
 # =============================================================================
 
 require 'fileutils'
@@ -12,7 +13,7 @@ require 'json'
 
 module Dn1supSaveSettings
   module Test
-    test 'restorer: папки сразу, JSON — отложенно (spawn: false)' do
+    test 'restorer: всё отложенно — каталоги и JSON (spawn: false)' do
       skip('tar.exe недоступен') unless Archiver.available?
       skip('тест только для Windows') unless Gem.win_platform?
 
@@ -33,26 +34,35 @@ module Dn1supSaveSettings
           entry = Backup.create!(comment: 'тест', kind: 'manual')
           zip = File.join(Store.backups_dir, entry['file'])
 
-          # Меняем текущее состояние — восстановление должно его перезаписать.
+          # Меняем текущее состояние — восстановление применится после
+          # закрытия SketchUp, в работающем ничего не копируется.
           File.write(File.join(roaming, 'Materials', 'm1.skm'), 'CHANGED')
           File.write(File.join(local, 'PrivatePreferences.json'), '{"changed":1}')
 
           result = Restorer.restore!(zip, auto_backup: false, spawn: false)
 
-          assert_equal ['Materials'], result.restored, 'каталог применён сразу'
-          assert_equal ['PrivatePreferences.json', 'SharedPreferences.json'].sort,
-                       result.deferred.sort, 'JSON-файлы отложены'
+          assert result.restored.empty?, 'в работающем SketchUp ничего не копируется сразу'
+          assert result.errors.empty?, "ошибок нет: #{result.errors.inspect}"
+          assert_equal ['Materials', 'PrivatePreferences.json', 'SharedPreferences.json'].sort,
+                       result.deferred.sort, 'все цели отложены'
           assert result.pending_dir && File.directory?(result.pending_dir), 'pending-папка создана'
           assert_equal '{"old":1}',
                        File.read(File.join(result.pending_dir, 'staged', 'local', 'PrivatePreferences.json')),
                        'в staged — файл из архива'
+          assert File.directory?(File.join(result.pending_dir, 'staged', 'roaming', 'Materials')),
+                 'каталог тоже попадает в staged'
+          assert_equal 'OLD', File.read(File.join(result.pending_dir, 'staged', 'roaming', 'Materials', 'm1.skm'))
           assert_equal '{"changed":1}', File.read(File.join(local, 'PrivatePreferences.json')).strip,
                        'JSON в запущенном SketchUp НЕ перезаписан — применится после закрытия'
-          assert_equal 'OLD', File.read(File.join(roaming, 'Materials', 'm1.skm')),
-                       'каталог перезаписан содержимым архива'
+          assert_equal 'CHANGED', File.read(File.join(roaming, 'Materials', 'm1.skm')),
+                       'каталог в запущенном SketchUp НЕ перезаписан — применится после закрытия'
+
           cfg = JSON.parse(File.read(File.join(result.pending_dir, 'pending.json')))
           assert_equal roaming, cfg['roots']['roaming']
           assert_equal true, cfg['relaunch'], 'relaunch по умолчанию включён'
+          kinds = cfg['targets'].each_with_object({}) { |t, h| h[t['name']] = t['kind'] }
+          assert_equal 'dir', kinds['Materials'], 'kind каталога записан в pending.json'
+          assert_equal 'file', kinds['PrivatePreferences.json'], 'kind файла записан в pending.json'
 
           assert DeferredApply.cancel!, 'pending-папка убрана'
         ensure

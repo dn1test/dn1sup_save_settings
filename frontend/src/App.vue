@@ -72,6 +72,18 @@ const kindInfo = {
   imported: { label: 'Импорт',  cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300' }
 }
 
+// Подсказка строки истории: имя файла плюс то, что не влезло в одну строку
+// списка (тип копии, комментарий/метки, версия SketchUp).
+function entryTitle(entry) {
+  const parts = [entry.file]
+  const kind = kindInfo[entry.kind]?.label
+  if (kind) parts.push(`Тип: ${kind}`)
+  const note = entry.comment || (entry.labels || []).join(', ')
+  if (note) parts.push(note)
+  if (entry.su_version) parts.push(`SketchUp ${entry.su_version} · путей: ${(entry.paths || []).length}`)
+  return parts.join('\n')
+}
+
 function doCreate() {
   if (!canCreate.value) return
   createBackup(comment.value.trim(), selectedKeys.value || [])
@@ -106,7 +118,6 @@ function doRestore() {
 }
 
 const hasPlugins = computed(() => (restoreModal.value?.targets || []).some(t => t.key === 'plugins'))
-const hasFiles = computed(() => (restoreModal.value?.targets || []).some(t => t.kind === 'file'))
 const hasDirs = computed(() => (restoreModal.value?.targets || []).some(t => t.kind !== 'file'))
 
 // -- отложенное применение файлов настроек ---------------------------------------
@@ -277,8 +288,9 @@ onMounted(loadState)
         применится автоматически сразу после закрытия SketchUp.
       </span>
       <span v-else class="flex-1">
-        Файлы настроек из архива <span class="font-mono">{{ state.pendingRestore.archive }}</span>
-        применятся автоматически сразу после закрытия SketchUp.
+        Восстановление из архива <span class="font-mono">{{ state.pendingRestore.archive }}</span>
+        ({{ (state.pendingRestore.labels || []).join(', ') }})
+        применятся автоматически сразу после закрытия SketchUp, затем он запустится снова.
       </span>
       <button class="ss-btn-ghost !px-2 !py-1 !text-[10px] shrink-0" @click="cancelPending">Отменить</button>
     </div>
@@ -403,34 +415,28 @@ onMounted(loadState)
           <h2 class="text-xs font-semibold uppercase tracking-wide">История сохранений</h2>
           <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ state.history.length }}</span>
         </div>
-        <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+        <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
           <div
             v-for="entry in state.history"
             :key="entry.file"
-            class="rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 hover:border-brand-300 dark:hover:border-brand-800 transition-colors"
+            class="group relative flex items-center gap-2 rounded-lg px-2.5 py-1.5 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+            :title="entryTitle(entry)"
           >
-            <div class="flex items-center gap-2">
-              <Clock3 :size="13" class="text-slate-400 shrink-0" />
-              <span class="text-xs font-semibold tabular-nums">{{ formatDate(entry.created_at) }}</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium" :class="kindInfo[entry.kind]?.cls || 'bg-slate-100 text-slate-500'">
-                {{ kindInfo[entry.kind]?.label || entry.kind }}
-              </span>
-              <span class="ml-auto text-[11px] text-slate-400 shrink-0 tabular-nums">{{ formatBytes(entry.size) }}</span>
-            </div>
-            <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              <span v-if="entry.comment" class="italic">{{ entry.comment }}</span>
-              <span v-else class="block truncate">{{ (entry.labels || []).join(', ') || '—' }}</span>
-            </div>
-            <div class="mt-1.5 flex items-center gap-1">
-              <span class="text-[10px] text-slate-400 mr-auto">SU {{ entry.su_version }} · путей: {{ (entry.paths || []).length }}</span>
-              <button class="ss-btn-primary !px-2.5 !py-1 !text-xs" :disabled="!state.tarOk || !!state.busy" @click="openRestore(entry)">
-                <ArchiveRestore :size="13" />
+            <Clock3 :size="13" class="text-slate-400 shrink-0" />
+            <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-600 dark:text-slate-300">{{ entry.file }}</span>
+            <span class="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">{{ formatDate(entry.created_at) }}</span>
+            <span class="w-14 shrink-0 text-right text-[11px] tabular-nums text-slate-400">{{ formatBytes(entry.size) }}</span>
+            <!-- Действия строки появляются при наведении; подложка повторяет фон
+                 строки и растворяется градиентом, гася метаданные под кнопками -->
+            <div class="absolute inset-y-0 right-0 hidden group-hover:flex items-center gap-1 rounded-lg pr-1.5 pl-10 bg-gradient-to-l from-slate-100/70 via-slate-100/70 to-transparent dark:from-slate-800/60 dark:via-slate-800/60">
+              <button class="ss-btn-primary !px-2 !py-1 !text-[11px]" :disabled="!state.tarOk || !!state.busy" @click="openRestore(entry)">
+                <ArchiveRestore :size="12" />
                 Восстановить
               </button>
-              <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800" title="Лог архивации" :disabled="!state.tarOk" @click="openLog(entry)">
+              <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700" title="Лог архивации" :disabled="!state.tarOk" @click="openLog(entry)">
                 <FileText :size="14" />
               </button>
-              <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800" title="Показать в папке" @click="revealBackup(entry.file)">
+              <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700" title="Показать в папке" @click="revealBackup(entry.file)">
                 <Eye :size="14" />
               </button>
               <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Удалить архив" @click="confirmDelete = entry.file">
@@ -523,28 +529,27 @@ onMounted(loadState)
 
         <div
           v-if="hasPlugins"
-          class="flex items-start gap-2 p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 text-[11px] leading-snug"
+          class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
-          <span>В архив включены расширения (Plugins): в копию попадает и сам плагин; после восстановления нужен перезапуск SketchUp.</span>
+          <span>В архив включены расширения (Plugins): в копию попадает и сам плагин. Применение — после закрытия SketchUp, затем он запустится снова.</span>
         </div>
 
         <div
-          v-if="hasFiles"
           class="flex items-start gap-2 p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 text-[11px] leading-snug"
         >
           <Clock3 :size="13" class="shrink-0 mt-0.5" />
           <span>
-            Файлы настроек (PrivatePreferences.json / SharedPreferences.json) применятся
-            автоматически сразу после закрытия SketchUp — он перезаписывает их при выходе,
-            поэтому применить их в работающем SketchUp нельзя.
+            Восстановление применяется автоматически сразу после закрытия SketchUp —
+            и файлы настроек, и папки: в работающем SketchUp настройки перезаписываются
+            при выходе, а файлы расширений заняты. После применения SketchUp запустится снова.
           </span>
         </div>
 
-        <label v-if="hasFiles" class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
+        <label class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
           <input v-model="restoreModal.relaunch" type="checkbox" class="accent-brand-500 w-3.5 h-3.5 mt-0.5 shrink-0">
           <span class="text-xs leading-snug">
-            Запустить SketchUp после применения файлов
+            Запустить SketchUp после применения
             <span class="block text-[10px] text-slate-400">Иначе откройте SketchUp вручную</span>
           </span>
         </label>
