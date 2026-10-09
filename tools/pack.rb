@@ -76,6 +76,31 @@ if version.nil?
 end
 raise 'Не удалось определить версию расширения' unless version
 
+# --- registry.json: выравнивание версии по коду -------------------------------
+# Корневой registry.json — источник метаданных для каталога и обновлений
+# (менеджер и самообновление читают его через raw.githubusercontent.com).
+require 'json'
+registry_path = File.join(root, 'registry.json')
+registry_data = nil
+if File.file?(registry_path)
+  registry_data = begin
+    JSON.parse(File.read(registry_path))
+  rescue StandardError
+    nil
+  end
+  if registry_data.is_a?(Array)
+    registry_data.each do |e|
+      e['version'] = version if e.is_a?(Hash) && e['id'].to_s == cfg[:id].to_s
+    end
+    File.write(registry_path, JSON.pretty_generate(registry_data) + "\n")
+    puts "registry.json: version -> #{version}"
+  else
+    warn 'ВНИМАНИЕ: registry.json в корне имеет неожиданный формат'
+  end
+else
+  warn 'ВНИМАНИЕ: нет registry.json в корне репозитория'
+end
+
 # --- сборка staging -----------------------------------------------------------
 Dir.mktmpdir do |tmp|
   stage = File.join(tmp, 'stage')
@@ -122,6 +147,13 @@ Dir.mktmpdir do |tmp|
     else
       warn 'ВНИМАНИЕ: нет ни своего, ни shared/dn1sup_updater.rb'
     end
+  end
+
+  # 4. registry.json внутрь пакета (самоописание .rbz)
+  if registry_data.is_a?(Array)
+    FileUtils.cp(registry_path, File.join(dest, 'registry.json'))
+    entries << [File.join(target_dir_name, 'registry.json').tr('\\', '/'),
+                File.binread(File.join(dest, 'registry.json'))]
   end
 
   out_dir = File.join(root, 'dist')

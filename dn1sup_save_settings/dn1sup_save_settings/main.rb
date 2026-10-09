@@ -59,7 +59,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.12.0'.freeze
+  VERSION   = '0.12.1'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
@@ -68,7 +68,7 @@ module Dn1supSaveSettings
   TOOLBAR_NAME = 'DN1Sup Save Settings'.freeze
   CMD_TOOLTIP  = 'DN1Sup Save Settings — резервные копии настроек SketchUp'.freeze
 
-  REPO     = 'dn1test/sketchup-dn1sup-extensions'.freeze
+  REPO     = 'dn1test/dn1sup_save_settings'.freeze
   ID       = 'dn1sup_save_settings'.freeze
   ASSET    = "#{ID}.rbz".freeze
   PAGE_URL = "https://github.com/#{REPO}/releases".freeze
