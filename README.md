@@ -229,3 +229,10 @@ update_from_dev.rb ← ruby update_from_dev.rb: копия в Plugins + hot relo
 
 - **Автор**: DN1Sup <dn1codegen@gmail.com>
 - **Лицензия**: MIT — см. файл [LICENSE](LICENSE)
+
+---
+
+## Публикация на GitHub
+
+Как оформить репозиторий, чтобы DN1Sup Extension Store находил расширение,
+показывал его в каталоге и предлагал обновления, — см. [PUBLISHING.md](PUBLISHING.md).
