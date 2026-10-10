@@ -50,6 +50,7 @@ module Dn1sup
     def check!(cfg)
       id_str = cfg[:id].to_s
       return nil if @checking[id_str]
+      return nil if dev_install?
 
       @checking[id_str] = true
 
@@ -81,6 +82,17 @@ module Dn1sup
       else
         done.call(work.call)
       end
+    end
+
+    # DEV-канал: расширение установлено sketchup-dev-mcp из папки разработки —
+    # рядом с этим файлом лежит .sketchup_dev.json (в rbz он не попадает:
+    # pack-скрипты исключают скрытые файлы). Обновления такой установки
+    # приходят только из dev-папки (ext_install / ext_reload), поэтому
+    # self-update из GitHub Releases отключён.
+    def dev_install?
+      File.exist?(File.join(File.dirname(__FILE__), '.sketchup_dev.json'))
+    rescue StandardError
+      false
     end
 
     # GET https://api.github.com/repos/{owner}/{repo}/releases/latest
@@ -125,27 +137,70 @@ module Dn1sup
 
     # Все репозитории аккаунта/организации (для автопоиска расширений).
     # GET /users/{owner}/repos, а если аккаунт — организация, фолбэк на
-    # /orgs/{owner}/repos. Возвращает Array JSON-объектов или [] при ошибке.
+    # /orgs/{owner}/repos. Постранично: per_page=100, до REPOS_MAX_PAGES
+    # страниц — иначе при >100 репозиториях хвост молча терялся.
+    # Возвращает Array JSON-объектов или [] при ошибке.
+    REPOS_MAX_PAGES = 5
+
     def repos_of_owner(owner)
       require 'net/http'
       require 'json'
       owner = owner.to_s
       %w[users orgs].each do |segment|
-        uri = URI.parse("#{GITHUB_API}/#{segment}/#{owner}/repos?per_page=100&sort=pushed")
-        res = http_get(uri)
-        next unless res.is_a?(Net::HTTPSuccess)
+        repos = []
+        REPOS_MAX_PAGES.times do |i|
+          uri = URI.parse("#{GITHUB_API}/#{segment}/#{owner}/repos?per_page=100&page=#{i + 1}&sort=pushed")
+          res = http_get(uri)
+          break unless res.is_a?(Net::HTTPSuccess)
 
-        json = JSON.parse(res.body)
-        if json.is_a?(Array)
-          log_debug("repos_of_owner(#{owner}): OK #{json.size} репозиториев (/#{segment}/)")
-          return json
+          json = JSON.parse(res.body)
+          break unless json.is_a?(Array)
+
+          repos.concat(json)
+          break if json.size < 100
         end
+        next if repos.empty?
+
+        log_debug("repos_of_owner(#{owner}): OK #{repos.size} репозиториев (/#{segment}/)")
+        return repos
       end
       log_debug("repos_of_owner(#{owner}): недоступно")
       []
     rescue StandardError, ScriptError => e
       log_error(e)
       []
+    end
+
+    # Статус репозитория на GitHub: существует, удалён или переименован
+    # (для чистки каталога от «мёртвых» записей).
+    # GET /repos/{owner}/{repo}: редиректы переименованных репозиториев
+    # http_get проходит сам, поэтому итоговое full_name сравнивается с
+    # запрошенным именем. Возвращает:
+    #   { exists: true,  repo: 'owner/name', renamed: true/false }
+    #   { exists: false }                     — HTTP 404 (репозиторий удалён)
+    #   nil                                   — сеть/лимиты: статус неизвестен
+    def repo_meta(repo)
+      require 'net/http'
+      require 'json'
+      repo = repo.to_s
+      uri = URI.parse("#{GITHUB_API}/repos/#{repo}")
+      res = http_get(uri)
+      unless res.is_a?(Net::HTTPSuccess)
+        log_debug("repo_meta(#{repo}): HTTP #{res.respond_to?(:code) ? res.code : '?'}")
+        return { exists: false } if res.respond_to?(:code) && res.code.to_i == 404
+
+        return nil
+      end
+      json = JSON.parse(res.body)
+      full = json.is_a?(Hash) ? json['full_name'].to_s : ''
+      return nil if full.empty?
+
+      renamed = !full.casecmp?(repo)
+      log_debug("repo_meta(#{repo}): OK#{renamed ? " -> #{full}" : ''}")
+      { exists: true, repo: renamed ? full : repo, renamed: renamed }
+    rescue StandardError, ScriptError => e
+      log_error(e)
+      nil
     end
 
     # Лог правок между двумя тегами: первые строки сообщений коммитов.
@@ -436,7 +491,7 @@ module Dn1sup
     # говорит об этом расширении (версия из registry.json авторитетна).
     def release_newer_than_install?(cfg, fetched)
       return false if fetched[:from_registry] &&
-                      fetched[:latest].to_s != fetched[:release]['tag_name'].to_s.sub(/\Av/, '')
+                      fetched[:latest].to_s != fetched[:release]['tag_name'].to_s.sub(/\Av/i, '')
 
       inst_time = installed_at(cfg[:id])
       return false unless inst_time
@@ -710,7 +765,11 @@ module Dn1sup
       @log_mutex ||= Mutex.new
       @log_mutex.synchronize do
         path = File.join(temp_dir, 'dn1sup_updater.log')
-        File.rename(path, "#{path}.old") if File.file?(path) && File.size(path) > LOG_SIZE_LIMIT
+        old  = "#{path}.old"
+        # Windows: File.rename не перезаписывает существующий .old (Errno::EEXIST),
+        # без удаления ротация падала бы и логи замолкали навсегда.
+        File.delete(old) if File.file?(old)
+        File.rename(path, old) if File.file?(path) && File.size(path) > LOG_SIZE_LIMIT
         File.open(path, 'a') { |f| f.puts(line, *backtrace) }
       end
     rescue StandardError

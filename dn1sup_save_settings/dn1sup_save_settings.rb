@@ -31,7 +31,7 @@ unless _registered
   begin
     ext = SketchupExtension.new("DN1Sup Save Settings", File.join('dn1sup_save_settings', 'main'))
     ext.description = "Сохранение параметров SketchUp в zip-архив и восстановление из архива; сброс интерфейса и плагинов к заводским настройкам; история сохранений с датами"
-    ext.version     = '0.12.2'
+    ext.version     = '0.12.3'
     ext.creator     = "DN1Sup"
     ext.copyright   = '2026 DN1Sup <dn1codegen@gmail.com> (MIT)'
     ext.id          = 'dn1sup_save_settings' if ext.respond_to?(:id=)

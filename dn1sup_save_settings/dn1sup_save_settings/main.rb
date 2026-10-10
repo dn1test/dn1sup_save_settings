@@ -59,7 +59,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.12.2'.freeze
+  VERSION   = '0.12.3'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
