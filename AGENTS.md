@@ -1,8 +1,20 @@
 # AGENTS.md — DN1Sup Save Settings
 
+> **ОБЯЗАТЕЛЬНО ПРОЧИТАТЬ ПЕРЕД РАБОТОЙ — общие правила каналов dev / prod**
+> (dev-вариант против релизов, dev-цикл, публикация): мастер
+> `U:\dn1code\sketchup_ext\AGENTS.md` — единственная полная копия правил
+> (публикация: `U:\dn1code\sketchup_ext\PUBLISHING.md`).
+
+- Расширение: `dn1sup_save_settings` / dev-вариант: `dn1sup_save_settings_dev` / имя: «DN1Sup Save Settings».
+- Критичное, пока мастер не прочитан: id с суффиксом `_dev` никогда не
+  публикуются; версию поднимать сразу в трёх местах (`ext.version` регистратора,
+  `.sketchup_dev.json`, `registry.json`); релиз — только при зелёных тестах.
+  Локальный чек-лист публикации — в `PUBLISHING.md` этого репозитория.
+
+## Локальные правила репозитория
+
 Sketchup API 2024 и выше
 Интерфейс HTML VUE 3 + Tailwind
-
 
 Настройки путей Sketchup для сохранения
 
@@ -13,50 +25,3 @@ C:\Users\User\AppData\Roaming\SketchUp\SketchUp 202x\SketchUp\Plugins
 C:\Users\User\AppData\Roaming\SketchUp\SketchUp 202x\SketchUp\Styles
 C:\Users\User\AppData\Roaming\SketchUp\SketchUp 202x\SketchUp\Templates
 C:\Users\User\AppData\Roaming\SketchUp\SketchUp 202x\SketchUp\SharedPreferences.json
-
-## Каналы dev / prod (обязательные правила)
-
-Обязательные правила установки и распространения расширения `dn1sup_save_settings` («DN1Sup Save Settings»).
-Действуют в каждой сессии агента в этом репозитории. Реализовано инструментами
-MCP-сервера sketchup-dev-mcp; публикационная сторона — в PUBLISHING.md менеджера
-dn1sup_ext_manager.
-
-| | dev-вариант | prod-вариант |
-|---|---|---|
-| id / имя | `dn1sup_save_settings_dev` / «DN1Sup Save Settings [DEV]» | `dn1sup_save_settings` / «DN1Sup Save Settings» |
-| Ставится и обновляется | только sketchup-dev-mcp из папки разработки: `ext_install id=dn1sup_save_settings` → `ext_reload id=dn1sup_save_settings_dev` | только GitHub Releases (тег `vX.Y.Z` + `.rbz` через CI), обновляет dn1sup_ext_manager |
-| Распространение | никогда не публикуется | релизы этого репозитория |
-
-1. **Суффикс `_dev` зарезервирован**: id с `_dev` никогда не публикуются — не
-   создавать для них релизы, `.rbz` и записи в registry.json каталога
-   (`ext_pack` откажется собирать).
-2. **Dev-цикл** (машина разработки): правка → `ext_check id=dn1sup_save_settings` →
-   `ext_install id=dn1sup_save_settings` (по умолчанию канал dev) →
-   `ext_reload id=dn1sup_save_settings_dev` (сам подтянет свежий код из dev-папки и
-   выгрузит прод-двойник из сессии) → `ext_test id=dn1sup_save_settings_dev` → `view_png`.
-   Файлы прода в Plugins руками не трогать.
-3. **Релиз** — только при зелёных тестах: поднять версию сразу в трёх местах
-   (`ext.version` регистратора, `.sketchup_dev.json`, `registry.json` — pack
-   проверяет расхождения), `ext_pack id=dn1sup_save_settings` → коммит + тег `v<версия>` →
-   CI соберёт `.rbz` и создаст Release. Релизный `.rbz` ставить через
-   `ext_install_rbz`, не копированием файлов.
-4. **Один неймспейс — один канал в сессии**: код у каналов общий, одновременно
-   грузится только один. Переключение — `ext_reload` нужного канала; не
-   включать оба в Extension Manager (сгенерированный dev-регистратор не
-   загрузится и покажет уведомление).
-5. **Манифест `.sketchup_dev.json`** в кодовой папке (id/display_name/
-   namespace/version) обязателен: по нему генерируется dev-регистратор и
-   работает выгрузка неймспейса. В `.rbz` манифест не попадает (pack исключает
-   скрытые файлы) — не добавлять руками.
-6. **Настройки (prefs) у каналов общие** — dev-вариант тестирует реальные
-   данные пользователя.
-7. **Self-update в dev-установке отключён**: `dn1sup_updater` рядом с маркером
-   `.sketchup_dev.json` молча пропускает проверку обновлений — обновления
-   dev-канала приходят только из dev-папки. Логику не менять, маркер не удалять.
-
-8. **Лог изменений — обязательная часть карточки и релиза**: четвёртая строка
-   карточки расширения («Что новоgo») показывается всегда; пользователь должен
-   видеть, что изменилось. Скрывать или удалять эту строку нельзя: если у
-   предлагаемого релиза пустое тело, Store показывает последний известный лог
-   из предыдущих релизов. Тела релизов заполняются из CHANGELOG.md
-   (`release_body.rb` в CI + `body_path`) — выпускать релизы без тела нельзя.
