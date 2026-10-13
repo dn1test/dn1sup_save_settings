@@ -263,6 +263,11 @@ onMounted(loadState)
         <div class="flex items-center gap-2">
           <h1 class="text-sm font-semibold leading-tight">Save Settings</h1>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">v{{ state.version }}</span>
+          <span
+            v-if="state.devBuild"
+            class="text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 whitespace-nowrap"
+            title="Работает dev-вариант (рабочая копия sketchup-dev-mcp), не релиз"
+          >DEV</span>
         </div>
         <p class="text-[11px] text-slate-400 dark:text-slate-500 truncate">
           SketchUp {{ state.suYear }} · {{ state.suVersion }} · {{ state.user }}

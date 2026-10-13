@@ -375,6 +375,8 @@ module Dn1supSaveSettings
       payload = safe do
         h = {
           'version' => VERSION,
+          # загружен именно dev-вариант (Plugins/<id>_dev) — для бейджа DEV в шапке
+          'dev_build' => DEV_BUILD,
           'su_version' => Paths.su_version,
           'su_year' => Paths.su_year,
           'tar_ok' => Archiver.available?,

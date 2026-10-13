@@ -26,6 +26,7 @@ const isMock = !getSketchup()
 const state = reactive({
   ready: false,
   version: '…',
+  devBuild: false, // загружен dev-вариант (Plugins/<id>_dev) — бейдж DEV в шапке
   suVersion: '',
   suYear: '',
   tarOk: true,
@@ -127,6 +128,7 @@ if (typeof window !== 'undefined') {
     if (!payload) return
     state.ready = true
     state.version = payload.version || '—'
+    state.devBuild = !!payload.dev_build
     state.suVersion = payload.su_version || ''
     state.suYear = payload.su_year || ''
     state.tarOk = payload.tar_ok !== false
