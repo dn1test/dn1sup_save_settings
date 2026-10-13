@@ -6,7 +6,7 @@ import {
 } from 'lucide-vue-next'
 import {
   state, isMock, toast, loadState, createBackup, restoreBackup, deleteBackup,
-  importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, updateFromDev,
+  importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, updateFromDev, checkUpdate,
   chooseArchiveDir, resetArchiveDir, cancelPendingRestore, dismissRestoreResult, resetTargets
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
@@ -269,6 +269,9 @@ onMounted(loadState)
         </p>
       </div>
       <div class="ml-auto flex items-center gap-1">
+        <button class="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Проверить обновление: сначала локальная папка разработки, потом GitHub" @click="checkUpdate">
+          <RotateCw :size="15" />
+        </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Обновить сведения" @click="loadState">
           <RotateCw :size="15" />
         </button>

@@ -305,4 +305,10 @@ export function updateFromDev() {
   callRuby('update_from_dev')
 }
 
+// Проверка обновления: сначала локальная папка разработки, потом GitHub.
+export function checkUpdate() {
+  if (isMock) { toast('ok', 'Проверка обновлений (mock): актуальная версия'); return }
+  callRuby('check_update')
+}
+
 export { state, isMock, toast }

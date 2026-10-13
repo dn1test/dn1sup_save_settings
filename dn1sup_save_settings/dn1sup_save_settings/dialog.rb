@@ -187,6 +187,16 @@ module Dn1supSaveSettings
             DevUpdater.update_and_reload!(reopen_dialog: true, notify: false)
           end
         end
+      when 'check_update'
+        # Кнопка «круг со стрелками» в шапке: сначала локальная папка
+        # (DEV_DIR из MANIFEST), потом GitHub — ставится свежайшее.
+        safe do
+          if defined?(Dn1sup::Updater)
+            Dn1sup::Updater.check_local_first!(MANIFEST.merge(force: true, async: true))
+          else
+            UI.openURL(PAGE_URL)
+          end
+        end
       end
     rescue StandardError => e
       Log.exception(e, "dialog:#{name}")
