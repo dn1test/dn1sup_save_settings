@@ -59,10 +59,8 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.12.4'.freeze
+  VERSION   = '0.13.0'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
-  # DEV-вариант живёт в Plugins/<id>_dev/ — признак по имени корневой папки
-  DEV_BUILD = File.basename(PLUG_ROOT).end_with?('_dev').freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
   MENU_NAME   = 'Save Settings'.freeze   # подменю расширения внутри COMMON_MENU
@@ -153,7 +151,7 @@ module Dn1supSaveSettings
       end
       menu.add_item('Страница релизов на GitHub') { UI.openURL(Dn1supSaveSettings::PAGE_URL) }
       menu.add_separator
-      menu.add_item('🔄 Обновить из dev-папки') { Dn1supSaveSettings.safe { Dn1supSaveSettings.update_from_dev } }
+      menu.add_item('🔄 Обновить из рабочей копии') { Dn1supSaveSettings.safe { Dn1supSaveSettings.update_from_dev } }
       menu.add_item('⚡ Перезагрузить (Hot Reload)') { Dn1supSaveSettings.safe { Dn1supSaveSettings.hot_reload } }
       menu.add_separator
       menu.add_item('Справка') { Dn1supSaveSettings.safe { Dn1supSaveSettings.show_dialog(true) } }

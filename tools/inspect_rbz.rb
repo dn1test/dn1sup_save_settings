@@ -46,7 +46,7 @@ puts '--- contents ---'
 up = entry_body(data, 'dn1sup_save_settings/dn1sup_updater.rb')
 ld = entry_body(data, 'dn1sup_save_settings.rb')
 rg = entry_body(data, 'dn1sup_save_settings/registry.json')
-puts 'updater_new(dev_install?)=' + (up.to_s.include?('def dev_install?') ? 'OK' : 'FAIL')
+puts 'updater_new(dev_source?)=' + (up.to_s.include?('def dev_source?') ? 'OK' : 'FAIL')
 puts 'updater_new(repo_meta)=' + (up.to_s.include?('def repo_meta') ? 'OK' : 'FAIL')
 puts 'updater_new(log_rotation_fix)=' + (up.to_s.include?('File.delete(old) if File.file?(old)') ? 'OK' : 'FAIL')
 puts "loader_version=" + (ld.to_s[/ext\.version\s*=\s*'([^']+)'/, 1] || '?')
