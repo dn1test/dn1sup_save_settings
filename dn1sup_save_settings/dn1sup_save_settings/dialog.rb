@@ -174,19 +174,6 @@ module Dn1supSaveSettings
         push_state(dlg)
       when 'reset_target'
         reset_target(dlg, param)
-      when 'update_from_dev'
-        safe do
-          if defined?(UI) && UI.respond_to?(:start_timer)
-            UI.start_timer(0.05, false) do
-              res = DevUpdater.update_and_reload!(reopen_dialog: true, notify: false)
-              if !res['success'] && defined?(UI)
-                UI.messagebox("Ошибка обновления из dev-папки:\n#{res['error']}")
-              end
-            end
-          else
-            DevUpdater.update_and_reload!(reopen_dialog: true, notify: false)
-          end
-        end
       when 'check_update'
         # Кнопка «круг со стрелками» в шапке: сначала локальная папка
         # (DEV_DIR из MANIFEST), потом GitHub — ставится свежайшее.

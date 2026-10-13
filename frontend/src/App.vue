@@ -6,7 +6,7 @@ import {
 } from 'lucide-vue-next'
 import {
   state, isMock, toast, loadState, createBackup, restoreBackup, deleteBackup,
-  importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, updateFromDev, checkUpdate,
+  importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, checkUpdate,
   chooseArchiveDir, resetArchiveDir, cancelPendingRestore, dismissRestoreResult, resetTargets
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
@@ -274,9 +274,6 @@ onMounted(loadState)
         </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Обновить сведения" @click="loadState">
           <RotateCw :size="15" />
-        </button>
-        <button v-if="!isMock" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-bold" title="Обновить из рабочей копии" @click="updateFromDev">
-          DEV
         </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Справка: как пользоваться" @click="helpOpen = true">
           <CircleHelp :size="16" />

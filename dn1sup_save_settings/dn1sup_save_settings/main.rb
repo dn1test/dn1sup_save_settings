@@ -154,9 +154,6 @@ module Dn1supSaveSettings
       end
       menu.add_item('Страница релизов на GitHub') { UI.openURL(Dn1supSaveSettings::PAGE_URL) }
       menu.add_separator
-      menu.add_item('🔄 Обновить из рабочей копии') { Dn1supSaveSettings.safe { Dn1supSaveSettings.update_from_dev } }
-      menu.add_item('⚡ Перезагрузить (Hot Reload)') { Dn1supSaveSettings.safe { Dn1supSaveSettings.hot_reload } }
-      menu.add_separator
       menu.add_item('Справка') { Dn1supSaveSettings.safe { Dn1supSaveSettings.show_dialog(true) } }
       menu.add_item('О расширении') { Dn1supSaveSettings.about }
 
@@ -212,18 +209,6 @@ module Dn1supSaveSettings
     end
 
     # -- действия ---------------------------------------------------------------
-
-    def update_from_dev(dev_dir = nil)
-      return unless defined?(DevUpdater)
-      was_open = @dialog && @dialog.visible?
-      DevUpdater.update_and_reload!(dev_dir: dev_dir, reopen_dialog: was_open, notify: true)
-    end
-
-    def hot_reload
-      return unless defined?(DevUpdater)
-      DevUpdater.reload!
-      UI.messagebox("⚡ Save Settings v#{VERSION} перезагружен!") if defined?(UI)
-    end
 
     def about
       UI.messagebox(
