@@ -39,6 +39,7 @@ const state = reactive({
   targets: [],   // [{key,label,scope,kind,name,path,exists,size,modified}]
   history: [],   // [{file,created_at,comment,kind,size,su_version,paths,labels}]
   busy: null,    // 'create' | 'restore' | null — длительные операции
+  progress: null, // {stage,label,current,total,percent} — прогресс создания копии
   toast: null,   // { kind: 'ok' | 'err', text }
   restartBanner: false,
   pendingRestore: null,  // {created_at, archive, labels, from_current_session, result} | null
@@ -74,11 +75,13 @@ function emitResult(kind, payload) {
   }
   if (kind === 'error') {
     state.busy = null
+    state.progress = null
     toast('err', payload.message || 'Ошибка Ruby', 7000)
     return
   }
   if (kind === 'backup_created') {
     state.busy = null
+    state.progress = null
     toast('ok', `Резервная копия создана: ${payload.entry?.file || ''}`)
   }
   if (kind === 'restore_done') {
@@ -143,6 +146,20 @@ if (typeof window !== 'undefined') {
     state.restoreRelaunch = payload.restore_relaunch !== false
     state.showHelp = !!payload.show_help
     state.busy = null
+    state.progress = null
+  }
+  window.pushProgress = function (payload) {
+    if (!payload) return
+    // Пока идёт создание копии — держим оверлей видимым, даже если
+    // busy по какой-то причине сброшен.
+    if (state.busy !== 'create') state.busy = 'create'
+    state.progress = {
+      stage: payload.stage || '',
+      label: payload.label || '',
+      current: Number(payload.current) || 0,
+      total: Number(payload.total) || 0,
+      percent: Math.max(0, Math.min(100, Number(payload.percent) || 0))
+    }
   }
   window.pushResult = function (kind, payload) {
     emitResult(kind, payload || {})
@@ -183,6 +200,7 @@ export function createBackup(comment, keys) {
     return
   }
   state.busy = 'create'
+  state.progress = { stage: 'prepare', label: 'Подготовка…', current: 0, total: 0, percent: 2 }
   callRubyJson('create_backup', { comment, keys })
 }
 

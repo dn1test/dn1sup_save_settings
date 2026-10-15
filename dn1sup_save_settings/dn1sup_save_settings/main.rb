@@ -59,7 +59,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.13.1'.freeze
+  VERSION   = '0.14.0'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
@@ -95,6 +95,11 @@ module Dn1supSaveSettings
 
     def unload!
       Log.info('unload! — выгрузка расширения')
+      begin
+        abort_backup! if respond_to?(:abort_backup!)
+      rescue StandardError
+        nil
+      end
       if (id = $dn1sup_ss_update_timer_id)
         UI.stop_timer(id) if defined?(UI) && UI.respond_to?(:stop_timer)
         $dn1sup_ss_update_timer_id = nil

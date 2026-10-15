@@ -115,6 +115,148 @@ module Dn1supSaveSettings
 
     private
 
+    # -- пошаговая сборка для окна прогресса (быстрый вариант) ------------------
+    # Job режет create! на тики таймера UI.start_timer: диалог успевает
+    # перерисоваться между целями, пользователь видит что происходит.
+    # Использование (см. dialog.rb):
+    #   job = Job.new(comment: '…', keys: […], kind: 'manual')
+    #   job.prepare!
+    #   job.copy_next! until job.copy_done?
+    #   entry = job.pack_and_finish!
+    # Шкала: подготовка 5%, копирование 5→80% (равными долями по целям),
+    # упаковка tar 80→95%, финал 100%. Без предподсчёта файлов — быстро.
+    class Job
+      attr_reader :selected, :manifest, :dest, :file, :staging, :index
+
+      def initialize(comment: '', keys: nil, kind: 'manual')
+        @comment = comment.to_s
+        @keys = keys
+        @kind = kind.to_s
+        @index = 0
+        @staging = nil
+        @finished = false
+      end
+
+      def total
+        @selected ? @selected.size : 0
+      end
+
+      def copy_done?
+        !@selected.nil? && @index >= @selected.size
+      end
+
+      def current_label
+        t = @selected && @selected[@index]
+        t ? t[:label].to_s : ''
+      end
+
+      def prepare!
+        raise Error, 'Встроенный zip-движок (tar.exe) недоступен' unless Archiver.available?
+
+        @selected = Backup.send(:select_targets, @keys)
+        raise Error, 'Не выбрано ни одного существующего пути для сохранения' if @selected.empty?
+
+        Store.ensure_dirs!
+        stamp = Time.now.strftime('%Y-%m-%d_%H%M%S')
+        prefix = @kind == 'manual' ? '' : "#{@kind}_"
+        @file = "dn1sup_settings_#{prefix}#{stamp}.zip"
+        n = 2
+        while File.exist?(File.join(Store.backups_dir, @file))
+          @file = "dn1sup_settings_#{prefix}#{stamp}_#{n}.zip"
+          n += 1
+        end
+        @dest = File.join(Store.backups_dir, @file)
+
+        @manifest = {
+          'app' => 'dn1sup_save_settings',
+          'manifest_version' => 1,
+          'created_at' => Time.now.strftime('%Y-%m-%d %H:%M:%S'),
+          'sketchup_version' => Paths.su_version,
+          'sketchup_year' => Paths.su_year,
+          'user' => Paths.username,
+          'comment' => @comment,
+          'kind' => @kind,
+          'paths' => @selected.map { |t| t[:key] },
+          'targets' => @selected.map do |t|
+            { 'key' => t[:key], 'scope' => t[:scope], 'kind' => t[:kind],
+              'name' => t[:name], 'label' => t[:label] }
+          end
+        }
+
+        require 'tmpdir'
+        @staging = Dir.mktmpdir('dn1sup_ss_')
+        File.write(File.join(@staging, Archiver::MANIFEST_NAME), JSON.pretty_generate(@manifest))
+        @entries = @selected.map { |t| { scope: t[:scope], name: t[:name], src: Paths.resolve(t) } }
+        @skipped_links = []
+        @started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @index = 0
+        self
+      end
+
+      # Копирует ОДНУ следующую цель в staging. Возвращает false когда копировать
+      # больше нечего (copy_done? == true).
+      def copy_next!
+        raise Error, 'Job не подготовлен (prepare!)' if @staging.nil? || @entries.nil?
+        return false if copy_done?
+
+        entry = @entries[@index]
+        dest = File.join(@staging, entry[:scope].to_s, entry[:name].to_s)
+        Archiver.copy_tree(entry[:src], dest, {}, @skipped_links)
+        @index += 1
+        !copy_done?
+      end
+
+      # Упаковка tar + запись истории + чистка staging. Вызывать после copy_done?.
+      def pack_and_finish!
+        raise Error, 'Job не подготовлен (prepare!)' if @staging.nil?
+        raise Error, 'Не все цели скопированы' unless copy_done?
+        raise Error, 'Job уже завершён' if @finished
+
+        File.write(File.join(@staging, Archiver::LOG_NAME),
+                   Archiver.send(:build_log, @manifest, @entries, @staging, @dest, @skipped_links))
+        top = Dir.children(@staging).sort
+        code = WinProcess.run(Archiver::TAR_PATH, '-acf', @dest, '-C', @staging, *top)
+        raise Error, "tar.exe: код #{code}" unless code.zero?
+
+        Paths.reset_sizes!
+        entry = HistoryStore.append(
+          'file' => @file,
+          'created_at' => @manifest['created_at'],
+          'comment' => @comment,
+          'kind' => @kind,
+          'size' => File.size(@dest),
+          'su_version' => @manifest['sketchup_version'],
+          'paths' => @manifest['paths'],
+          'labels' => @selected.map { |t| t[:label] }
+        )
+        elapsed = @started ? (Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started) : 0
+        Log.info(format('Резервная копия создана: %s (%d байт, %.2f сек)',
+                        entry['file'], entry['size'], elapsed))
+        @finished = true
+        cleanup
+        entry
+      ensure
+        cleanup unless @finished
+      end
+
+      def abort!
+        cleanup
+      end
+
+      private
+
+      def cleanup
+        return if @staging.nil?
+
+        begin
+          FileUtils.remove_entry(@staging)
+        rescue StandardError
+          nil
+        end
+        @staging = nil
+      end
+    end
+
     def select_targets(keys)
       wanted = Array(keys)
       Paths::TARGETS.select do |t|

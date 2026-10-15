@@ -819,11 +819,26 @@ onMounted(loadState)
 
     <!-- Индикатор длительной операции -->
     <div v-if="state.busy" class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 dark:bg-black/40">
-      <div class="ss-card px-6 py-5 flex flex-col items-center gap-2 shadow-xl">
+      <div class="ss-card px-6 py-5 flex flex-col items-center gap-2 shadow-xl w-[340px]">
         <Loader2 :size="26" class="animate-spin text-brand-500" />
         <div class="text-sm font-medium">
           {{ state.busy === 'create' ? 'Создание резервной копии…' : state.busy === 'reset' ? 'Подготовка сброса (создание резервной копии)…' : 'Восстановление настроек…' }}
         </div>
+        <!-- Прогресс создания копии: что делает + шкала -->
+        <template v-if="state.busy === 'create'">
+          <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div
+              class="h-full rounded-full bg-brand-500 transition-all duration-200"
+              :style="{ width: `${state.progress?.percent ?? 2}%` }"
+            />
+          </div>
+          <div class="w-full text-[11px] text-slate-500 dark:text-slate-400 text-center leading-snug">
+            <span v-if="state.progress?.stage === 'copy' && state.progress.total">
+              Копирование: {{ state.progress.label }} ({{ state.progress.current }}/{{ state.progress.total }})
+            </span>
+            <span v-else>{{ state.progress?.label || 'Подготовка…' }}</span>
+          </div>
+        </template>
         <div class="text-[11px] text-slate-400">Не закрывайте SketchUp до завершения операции</div>
       </div>
     </div>

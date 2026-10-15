@@ -43,7 +43,20 @@ export function mockPayload() {
 export function applyMockAction(name, params) {
   if (name === 'create_backup') {
     const keys = params.keys && params.keys.length ? params.keys : mockTargets.filter(t => t.exists).map(t => t.key)
-    const now = new Date()
+    const labels = mockTargets.filter(t => keys.includes(t.key)).map(t => t.label)
+    // Быстрый вариант прогресса: этапы по целям, как в Ruby (Job).
+    window.pushProgress({ stage: 'prepare', label: 'Подготовка…', current: 0, total: labels.length, percent: 3 })
+    labels.forEach((label, i) => {
+      setTimeout(() => {
+        const percent = 5 + Math.round(75 * (i + 1) / labels.length)
+        window.pushProgress({ stage: 'copy', label, current: i + 1, total: labels.length, percent })
+      }, 250 * (i + 1))
+    })
+    setTimeout(() => {
+      window.pushProgress({ stage: 'pack', label: 'Упаковка zip-архива…', current: labels.length, total: labels.length, percent: 88 })
+    }, 250 * (labels.length + 1))
+    setTimeout(() => {
+      const now = new Date()
     const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
     const entry = {
       file: `dn1sup_settings_${stamp}.zip`,
@@ -56,8 +69,10 @@ export function applyMockAction(name, params) {
       labels: mockTargets.filter(t => keys.includes(t.key)).map(t => t.label)
     }
     mockHistory = [entry, ...mockHistory]
+    window.pushProgress({ stage: 'done', label: 'Готово', current: labels.length, total: labels.length, percent: 100 })
     window.pushResult('backup_created', { entry, backups_path: mockPayload().backups_path })
     setTimeout(() => window.pushState(mockPayload()), 150)
+    }, 250 * (labels.length + 2))
   }
   if (name === 'restore_backup') {
     window.pushResult('restore_done', {

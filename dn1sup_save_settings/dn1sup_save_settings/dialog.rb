@@ -193,13 +193,90 @@ module Dn1supSaveSettings
     # -- действия ---------------------------------------------------------------
 
     # param: {comment: '…', keys: ['materials', …]} — keys пустой = все существующие.
+    # Быстрый вариант прогресса: сборка идёт пошагово через UI.start_timer —
+    # после каждой цели Ruby отдаёт управление, диалог перерисовывается и
+    # пользователь видит что копируется + шкалу. Без предподсчёта файлов.
     def create_backup(dlg, param)
+      if @backup_job
+        push_result(dlg, 'error', 'message' => 'Создание копии уже идёт — дождитесь завершения')
+        return
+      end
       payload = parse_json(param)
-      entry = safe { Backup.create!(comment: payload['comment'].to_s, keys: payload['keys'], kind: 'manual') }
-      return unless entry
+      job = Backup::Job.new(comment: payload['comment'].to_s, keys: payload['keys'], kind: 'manual')
+      begin
+        job.prepare!
+      rescue Error, StandardError => e
+        Log.exception(e, 'подготовка резервной копии')
+        push_result(dlg, 'error', 'message' => "#{e.class}: #{e.message}")
+        return
+      end
+      @backup_job = job
+      push_progress(dlg, 'stage' => 'prepare', 'label' => 'Подготовка…',
+                         'current' => 0, 'total' => job.total, 'percent' => 3)
+      schedule_backup_tick(dlg)
+    end
 
-      push_result(dlg, 'backup_created', 'entry' => entry, 'backups_path' => Store.backups_dir)
-      push_state(dlg)
+    def schedule_backup_tick(dlg)
+      return unless defined?(UI) && UI.respond_to?(:start_timer)
+
+      UI.start_timer(0.01, false) { backup_tick(dlg) }
+    end
+
+    def backup_tick(dlg)
+      job = @backup_job
+      return unless job
+
+      begin
+        unless job.copy_done?
+          label = job.current_label
+          idx = job.index
+          total = job.total
+          job.copy_next!
+          percent = total.zero? ? 80 : (5 + 75 * job.index / total)
+          push_progress(dlg, 'stage' => 'copy', 'label' => label,
+                             'current' => job.index, 'total' => total, 'percent' => percent)
+          Log.info("Прогресс копии: #{label} (#{job.index}/#{total})")
+          schedule_backup_tick(dlg)
+          return
+        end
+        # Копирование готово — показываем «Упаковка…» и даём диалогу
+        # перерисоваться до блокирующего tar.exe.
+        push_progress(dlg, 'stage' => 'pack', 'label' => 'Упаковка zip-архива…',
+                           'current' => job.total, 'total' => job.total, 'percent' => 88)
+        UI.start_timer(0.05, false) { backup_pack(dlg) }
+      rescue StandardError => e
+        @backup_job = nil
+        job.abort! rescue nil
+        Log.exception(e, 'создание резервной копии')
+        push_result(dlg, 'error', 'message' => "#{e.class}: #{e.message}")
+        push_state(dlg)
+      end
+    end
+
+    def backup_pack(dlg)
+      job = @backup_job
+      return unless job
+
+      begin
+        entry = job.pack_and_finish!
+        @backup_job = nil
+        push_progress(dlg, 'stage' => 'done', 'label' => 'Готово',
+                           'current' => job.total, 'total' => job.total, 'percent' => 100)
+        push_result(dlg, 'backup_created', 'entry' => entry, 'backups_path' => Store.backups_dir)
+        push_state(dlg)
+      rescue StandardError => e
+        @backup_job = nil
+        job.abort! rescue nil
+        Log.exception(e, 'упаковка резервной копии')
+        push_result(dlg, 'error', 'message' => "#{e.class}: #{e.message}")
+        push_state(dlg)
+      end
+    end
+
+    # Прервать пошаговую сборку (выгрузка расширения): чистим staging.
+    def abort_backup!
+      @backup_job&.abort! rescue nil
+      @backup_job = nil
     end
 
     # param: {file: 'dn1sup_settings_….zip', auto_backup: true,
@@ -404,6 +481,14 @@ module Dn1supSaveSettings
     rescue StandardError => e
       Log.exception(e, "push_result:#{kind}")
       puts "[SaveSettings] Не удалось передать результат в диалог: #{e.message}"
+    end
+
+    # Прогресс создания копии → window.pushProgress (фронтенд показывает
+    # шкалу и текущий шаг). Ошибки пуша не роняют сборку.
+    def push_progress(dlg, payload)
+      dlg.execute_script("window.pushProgress(#{JSON.generate(payload || {})});")
+    rescue StandardError => e
+      Log.warn("Не удалось передать прогресс в диалог: #{e.message}")
     end
 
     # -- вспомогательное ----------------------------------------------------------
