@@ -318,7 +318,7 @@ export function revealBackup(file) {
   callRuby('reveal_backup', file)
 }
 
-// Проверка обновления: сначала локальная папка разработки, потом GitHub.
+// Проверка обновления: только GitHub-релиз.
 export function checkUpdate() {
   if (isMock) { toast('ok', 'Проверка обновлений (mock): актуальная версия'); return }
   callRuby('check_update')

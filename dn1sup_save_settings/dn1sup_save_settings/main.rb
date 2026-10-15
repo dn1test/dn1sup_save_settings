@@ -59,7 +59,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.14.0'.freeze
+  VERSION   = '0.14.1'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup
@@ -151,7 +151,7 @@ module Dn1supSaveSettings
       menu.add_item('Проверить обновления сейчас') do
         Dn1supSaveSettings.safe do
           if defined?(Dn1sup::Updater)
-            Dn1sup::Updater.check_local_first!(Dn1supSaveSettings::MANIFEST.merge(force: true, async: true))
+            Dn1sup::Updater.check!(Dn1supSaveSettings::MANIFEST.merge(force: true, async: true))
           else
             UI.openURL(Dn1supSaveSettings::PAGE_URL)
           end
