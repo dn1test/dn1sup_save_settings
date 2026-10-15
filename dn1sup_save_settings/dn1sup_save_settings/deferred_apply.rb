@@ -166,8 +166,10 @@ module Dn1supSaveSettings
         dest = File.join(staged, t[:scope].to_s, t[:name])
         FileUtils.mkdir_p(File.dirname(dest))
         # Каталог копируется целиком (со всем содержимым) — при применении
-        # helper зальёт его поверх текущего, файл — перезапишет.
-        t[:kind] == 'dir' ? FileUtils.cp_r(entry[:src], dest) : FileUtils.cp(entry[:src], dest)
+        # helper зальёт его поверх текущего, файл — перезапишет. Симлинки
+        # разыменовываются содержимым (см. Archiver.copy_tree): пересоздание
+        # ссылок падает на Windows без SeCreateSymbolicLinkPrivilege.
+        t[:kind] == 'dir' ? Archiver.copy_tree(entry[:src], dest) : FileUtils.cp(entry[:src], dest)
       end
 
       config = {

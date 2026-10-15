@@ -130,12 +130,14 @@ module Dn1supSaveSettings
     end
 
     # Копирует распакованную цель поверх текущей (каталог — слиянием,
-    # файл — перезаписью).
+    # файл — перезаписью). Симлинки внутри распакованного дерева
+    # разыменовываются содержимым через Archiver.copy_tree: пересоздание
+    # ссылок через File.symlink падает на Windows без привилегии
+    # SeCreateSymbolicLinkPrivilege (Errno::EACCES @ rb_file_s_symlink).
     def copy_over!(src, target)
       dst = Paths.resolve(target)
       if target[:kind] == 'dir'
-        FileUtils.mkdir_p(dst)
-        FileUtils.cp_r(File.join(src, '.'), dst)
+        Archiver.copy_tree(src, dst)
       else
         FileUtils.mkdir_p(File.dirname(dst))
         FileUtils.rm(dst) if File.exist?(dst)

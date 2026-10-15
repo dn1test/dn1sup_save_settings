@@ -115,5 +115,45 @@ module Dn1supSaveSettings
         assert_nil Archiver.read_log(File.join(root, 'missing.zip')), 'отсутствующий архив → nil'
       end
     end
+
+    test 'archiver: симлинки разыменовываются содержимым, битые пропускаются' do
+      skip('tar.exe недоступен') unless Archiver.available?
+
+      Dir.mktmpdir do |root|
+        src = File.join(root, 'src')
+        real = File.join(root, 'real_target')
+        FileUtils.mkdir_p([File.join(real, 'sub'), src])
+        File.write(File.join(real, 'sub', 'data.txt'), 'content')
+        File.write(File.join(src, 'plain.txt'), 'plain')
+
+        can_link = begin
+          File.symlink(File.join(real, 'sub'), File.join(src, 'linkdir'))
+          File.symlink(File.join(src, 'plain.txt'), File.join(src, 'linkfile.txt'))
+          File.symlink(File.join(root, 'no_such_target'), File.join(src, 'broken'))
+          true
+        rescue StandardError, NotImplementedError
+          false
+        end
+        skip('создание симлинков недоступно (нужен режим разработчика/админ)') unless can_link
+
+        zip = File.join(root, 'out.zip')
+        Archiver.create({ 'created_at' => '2026-10-15 12:00:00' },
+                        [{ scope: 'roaming', name: 'Plugins', src: src }], zip)
+        assert File.file?(zip), 'zip не создан (упал на симлинке?)'
+
+        log = Archiver.read_log(zip)
+        assert log.to_s.include?('broken'), "битый симлинк не отражён в логе: #{log}"
+
+        Dir.mktmpdir do |tmp|
+          Archiver.extract(zip, tmp)
+          linkdir = File.join(tmp, 'roaming', 'Plugins', 'linkdir')
+          assert File.directory?(linkdir), 'каталог-ссылка не попал в архив содержимым'
+          assert !File.symlink?(linkdir), 'ссылка перенесена как ссылка, а не содержимым'
+          assert_equal 'content', File.read(File.join(linkdir, 'data.txt'))
+          assert_equal 'plain', File.read(File.join(tmp, 'roaming', 'Plugins', 'linkfile.txt'))
+          assert !File.exist?(File.join(tmp, 'roaming', 'Plugins', 'broken')), 'битый симлинк не должен попадать в архив'
+        end
+      end
+    end
   end
 end

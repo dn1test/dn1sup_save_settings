@@ -62,24 +62,87 @@ module Dn1supSaveSettings
       Dir.mktmpdir('dn1sup_ss_') do |staging|
         File.write(File.join(staging, MANIFEST_NAME), JSON.pretty_generate(manifest))
 
+        skipped_links = []
         entries.each do |entry|
           dest = File.join(staging, entry[:scope].to_s, entry[:name].to_s)
-          FileUtils.mkdir_p(File.dirname(dest))
-          if File.directory?(entry[:src])
-            FileUtils.cp_r(File.join(entry[:src], '.'), dest)
-          else
-            FileUtils.cp(entry[:src], dest)
-          end
+          copy_tree(entry[:src], dest, {}, skipped_links)
         end
 
         File.write(File.join(staging, LOG_NAME),
-                   build_log(manifest, entries, staging, dest_zip))
+                   build_log(manifest, entries, staging, dest_zip, skipped_links))
 
         top = Dir.children(staging).sort
         code = WinProcess.run(TAR_PATH, '-acf', dest_zip, '-C', staging, *top)
         raise Error, "tar.exe: код #{code}" unless code.zero?
       end
       dest_zip
+    end
+
+    # Рекурсивно копирует src в dest, разыменовывая симлинки/джанкшны
+    # СОДЕРЖИМЫМ (в архив/на диск попадает содержимое цели, а не ссылка).
+    #
+    # Зачем: FileUtils.cp_r переносит симлинки как симлинки через
+    # File.symlink, а на Windows это требует привилегии
+    # SeCreateSymbolicLinkPrivilege (режим разработчика/админ) и падает с
+    # Errno::EACCES (@ rb_file_s_symlink) — например, на ссылке вида
+    # Plugins/asm_faceup. Поэтому ссылки здесь не пересоздаются.
+    #
+    # Битые ссылки (цели нет) и циклы (ссылка на уже посещённый каталог)
+    # пропускаются с предупреждением в журнал; пути пропущенных
+    # накапливаются в skipped (тот же массив, что передан caller'ом).
+    # Возвращает массив skipped.
+    def copy_tree(src, dest, seen = nil, skipped = nil)
+      seen ||= {}
+      skipped ||= []
+      if File.symlink?(src)
+        begin
+          real = File.realpath(src)
+        rescue StandardError
+          real = nil
+        end
+        if real.nil? || !File.exist?(real)
+          skipped << src
+          Log.warn("Пропущен битый симлинк (нет цели): #{src}")
+          return skipped
+        end
+        if File.directory?(real)
+          key = cycle_key(real)
+          if seen[key]
+            skipped << src
+            Log.warn("Пропущен симлинк (цикл): #{src} -> #{real}")
+            return skipped
+          end
+          seen[key] = true
+          FileUtils.mkdir_p(dest)
+          Dir.children(real).each do |child|
+            copy_tree(File.join(real, child), File.join(dest, child), seen, skipped)
+          end
+        else
+          FileUtils.mkdir_p(File.dirname(dest))
+          FileUtils.cp(real, dest)
+        end
+      elsif File.directory?(src)
+        begin
+          real = File.realpath(src)
+        rescue StandardError
+          real = src
+        end
+        key = cycle_key(real)
+        if seen[key]
+          skipped << src
+          Log.warn("Пропущен каталог (цикл): #{src}")
+          return skipped
+        end
+        seen[key] = true
+        FileUtils.mkdir_p(dest)
+        Dir.children(src).each do |child|
+          copy_tree(File.join(src, child), File.join(dest, child), seen, skipped)
+        end
+      else
+        FileUtils.mkdir_p(File.dirname(dest))
+        FileUtils.cp(src, dest)
+      end
+      skipped
     end
 
     # Распаковывает архив целиком в dest_dir (создаётся при необходимости).
@@ -152,7 +215,7 @@ module Dn1supSaveSettings
 
     # Лог строится обходом staging-папки ПОСЛЕ копирования записей — поэтому
     # он всегда совпадает с фактическим содержимым архива.
-    def build_log(manifest, entries, staging, dest_zip)
+    def build_log(manifest, entries, staging, dest_zip, skipped = [])
       entries = Array(entries)
       lines = []
       lines << 'dn1sup_save_settings — лог архивации'
@@ -194,6 +257,9 @@ module Dn1supSaveSettings
       end
 
       lines << '---'
+      Array(skipped).each do |path|
+        lines << "Пропущен симлинк (битый или цикл, в архив не вошёл): #{path}"
+      end
       lines << "Итог: путей #{entries.size} · файлов #{total_files} · #{human_size(total_bytes)} (#{total_bytes} байт)"
       lines << "Архив: #{File.basename(dest_zip)}"
       lines.join("\n") + "\n"
@@ -202,6 +268,14 @@ module Dn1supSaveSettings
     def log_rel(from, path)
       prefix = File.join(from, '')
       path.start_with?(prefix) ? path[prefix.length..] : path
+    end
+
+    # Ключ посещённого каталога для отсечения циклов: на Windows файловая
+    # система регистронезависима, поэтому сравниваем в нижнем регистре —
+    # иначе одно и то же место, записанное в разном регистре, даст ложный
+    # проход и бесконечную рекурсию.
+    def cycle_key(real)
+      (RUBY_PLATFORM =~ /mswin|mingw|cygwin/ ? real.downcase : real)
     end
 
     def human_size(bytes)
