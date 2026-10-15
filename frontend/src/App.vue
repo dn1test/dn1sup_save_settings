@@ -269,8 +269,13 @@ onMounted(loadState)
         </p>
       </div>
       <div class="ml-auto flex items-center gap-1">
-        <button class="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Проверить обновление на GitHub" @click="checkUpdate">
-          <RotateCw :size="15" />
+        <button
+          class="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-wait"
+          :title="state.checkingUpdate ? 'Проверка обновлений…' : 'Проверить обновление на GitHub'"
+          :disabled="state.checkingUpdate"
+          @click="checkUpdate"
+        >
+          <RotateCw :size="15" :class="{ 'animate-spin': state.checkingUpdate }" />
         </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Справка: как пользоваться" @click="helpOpen = true">
           <CircleHelp :size="16" />

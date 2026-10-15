@@ -44,7 +44,8 @@ const state = reactive({
   restartBanner: false,
   pendingRestore: null,  // {created_at, archive, labels, from_current_session, result} | null
   restoreRelaunch: true, // запускать SketchUp после отложенного применения
-  showHelp: false        // одноразовый флаг Ruby: открыть справку (пункт меню «Справка»)
+  showHelp: false,       // одноразовый флаг Ruby: открыть справку (пункт меню «Справка»)
+  checkingUpdate: false  // индикатор кнопки проверки обновлений в шапке
 })
 
 let toastTimer = null
@@ -319,8 +320,22 @@ export function revealBackup(file) {
 }
 
 // Проверка обновления: только GitHub-релиз.
+// Ruby выполняет сеть в фоне (async), итог приходит нативным диалогом
+// SketchUp позже — поэтому UI сразу показывает спиннер на кнопке и тост,
+// а флаг снимается по таймауту (сигнала завершения из Ruby в диалог нет).
+let checkUpdateTimer = null
 export function checkUpdate() {
-  if (isMock) { toast('ok', 'Проверка обновлений (mock): актуальная версия'); return }
+  if (state.checkingUpdate) return
+  state.checkingUpdate = true
+  toast('ok', 'Проверка обновлений на GitHub…')
+  if (checkUpdateTimer) clearTimeout(checkUpdateTimer)
+  if (isMock) {
+    checkUpdateTimer = setTimeout(() => { state.checkingUpdate = false }, 1500)
+    return
+  }
+  // Сеть: open_timeout 4с + read_timeout 6с на запрос, запросов два
+  // (releases + registry) — 15с покрывает типичный случай.
+  checkUpdateTimer = setTimeout(() => { state.checkingUpdate = false }, 15000)
   callRuby('check_update')
 }
 
