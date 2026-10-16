@@ -3,6 +3,14 @@
 Лог изменений **DN1Sup Save Settings** (`dn1sup_save_settings`).
 Формат версий соответствует правилам `MAJOR.MINOR.PATCH`.
 
+## [0.14.5] — 2026-10-16
+
+- fix: добавлены недостающие `icons/ss_16.png` и `icons/ss_24.png`
+  (fallback для SketchUp < 16 в `setup_toolbar` — раньше лежал только
+  `ss.svg`, старые версии оставались без иконки). Дизайн не менялся:
+  PNG отрисованы новым генератором `tools/make_icons.rb` по тому же SVG
+  (синяя дискета, белая шторка, зелёный zip-бейдж).
+
 ## [0.14.4] — 2026-10-16
 
 - fix(dev): `update_from_dev.rb` говорил с мостом dn1sup_mcp2 по HTTP
