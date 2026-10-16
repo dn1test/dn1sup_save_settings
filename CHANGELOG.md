@@ -3,6 +3,15 @@
 Лог изменений **DN1Sup Save Settings** (`dn1sup_save_settings`).
 Формат версий соответствует правилам `MAJOR.MINOR.PATCH`.
 
+## [0.14.6] — 2026-10-16
+
+### DN1Sup Save Settings (v0.14.6)
+- **Фирменный знак тулбара DN1Sup** — единый стиль каталога Extension
+  Store: ползунки настроек (slate), прозрачный фон, вырезы — настоящая прозрачность
+  (SVG-маска; PNG 16/24 — альфа-канал). Источник знака —
+  `dn1sup_extensions` → `icons/products/` (`tools/make_icons.rb`).
+
+
 ## [0.14.5] — 2026-10-16
 
 - fix: добавлены недостающие `icons/ss_16.png` и `icons/ss_24.png`
