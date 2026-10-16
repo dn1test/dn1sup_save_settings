@@ -7,8 +7,8 @@
 # -------------------------------------------------------------------------------
 
 require_relative 'dn1sup_save_settings/dn1sup_save_settings/dev_updater'
-require 'net/http'
 require 'json'
+require 'socket'
 
 puts '=========================================================='
 puts '  DN1Sup Save Settings — Обновление из dev-папки'
@@ -53,9 +53,12 @@ else
 end
 
 puts "\n[3/3] Проверка запущенного SketchUp и горячая перезагрузка..."
+# Мост dn1sup_mcp2 слушает 127.0.0.1:9877 по TCP newline-JSON (НЕ HTTP):
+# один запрос = одно соединение, одна строка JSON с "\n", ответ — одна строка JSON.
+# Команды: eval | status | ping | stop. HTTP POST /eval мост не понимает —
+# такой запрос всегда уходил в ложное "мост не запущен", хотя SketchUp работал.
 bridge_port = 9877
 begin
-  uri = URI("http://127.0.0.1:#{bridge_port}/eval")
   ruby_code = <<~RUBY
     if defined?(Dn1supSaveSettings::DevUpdater)
       Dn1supSaveSettings::DevUpdater.reload!
@@ -64,24 +67,34 @@ begin
     end
   RUBY
 
-  req = Net::HTTP::Post.new(uri)
-  req['Content-Type'] = 'application/json'
-  req.body = JSON.generate({ code: ruby_code })
+  request = JSON.generate({ id: rand(1..1_000_000_000), cmd: "eval", code: ruby_code }) + "\n"
 
-  http = Net::HTTP.new(uri.host, uri.port)
-  http.open_timeout = 1.0
-  http.read_timeout = 15.0
-  response = http.request(req)
+  sock = Socket.tcp("127.0.0.1", bridge_port, connect_timeout: 2)
+  sock.write(request)
+  line = nil
+  line = sock.gets if IO.select([sock], nil, nil, 15.0)
+  sock.close
 
-  if response.is_a?(Net::HTTPSuccess)
-    puts "  ⚡ SketchUp обнаружен (порт #{bridge_port}): плагин успешно перезагружен на лету!"
+  if line
+    resp = (JSON.parse(line) rescue {})
+    err = resp["error"] || resp["backtrace"]
+    if err
+      puts "  ⚠️  SketchUp ответил с ошибкой: #{err}"
+      puts "     Файлы в каталоге Plugins обновлены — перезагрузите расширение вручную."
+    else
+      puts "  ⚡ SketchUp обнаружен (порт #{bridge_port}): плагин успешно перезагружен на лету!"
+    end
   else
-    puts "  ⚡ SketchUp ответил (код #{response.code}), расширение обновлено в Plugins."
+    puts "  ⚠️  Мост на порту #{bridge_port} закрыл соединение без ответа."
+    puts "     Файлы в каталоге Plugins обновлены — перезагрузите расширение вручную."
   end
-rescue Errno::ECONNREFUSED, Net::OpenTimeout, StandardError
-  puts "  ℹ️  SketchUp dev-мост не запущен на порту #{bridge_port}."
+rescue Errno::ECONNREFUSED, Errno::ETIMEDOUT, SocketError
+  puts "  ℹ️  SketchUp-мост не отвечает на порту #{bridge_port} (SketchUp закрыт?)."
   puts "     Файлы в каталоге Plugins обновлены. При следующем открытии SketchUp"
   puts "     или через меню 'Extensions -> DN1Sup -> Save Settings -> Обновить из dev-папки' изменения вступят в силу."
+rescue StandardError => e
+  puts "  ⚠️  Hot Reload не удался (#{e.class}: #{e.message})."
+  puts "     Файлы в каталоге Plugins обновлены — перезагрузите расширение вручную."
 end
 
 puts "\nГотово!"

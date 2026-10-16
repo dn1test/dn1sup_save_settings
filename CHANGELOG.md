@@ -3,6 +3,13 @@
 Лог изменений **DN1Sup Save Settings** (`dn1sup_save_settings`).
 Формат версий соответствует правилам `MAJOR.MINOR.PATCH`.
 
+## [0.14.4] — 2026-10-16
+
+- fix(dev): `update_from_dev.rb` говорил с мостом dn1sup_mcp2 по HTTP
+  POST /eval, а мост понимает только TCP newline-JSON — всегда врал
+  «мост не запущен». Hot Reload переписан на `Socket.tcp` +
+  `{"cmd":"eval"}`.
+
 ## [0.14.3] — 2026-10-16
 
 - Убран переходный маркер `.sketchup_dev.json` из `dev_source?` (период
