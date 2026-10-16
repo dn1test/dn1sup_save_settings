@@ -256,9 +256,7 @@ onMounted(loadState)
   <div class="h-full flex flex-col">
     <!-- Шапка -->
     <header class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70">
-      <div class="w-8 h-8 rounded-lg bg-brand-500 text-white flex items-center justify-center shrink-0">
-        <Archive :size="17" />
-      </div>
+      <img src="./assets/logo.svg" width="32" height="32" class="shrink-0" alt="DN1Sup Save Settings">
       <div class="min-w-0">
         <div class="flex items-center gap-2">
           <h1 class="text-sm font-semibold leading-tight">Save Settings</h1>

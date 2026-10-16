@@ -3,6 +3,12 @@
 Лог изменений **DN1Sup Save Settings** (`dn1sup_save_settings`).
 Формат версий соответствует правилам `MAJOR.MINOR.PATCH`.
 
+## [0.14.7] — 2026-10-16
+
+### DN1Sup Save Settings (v0.14.7)
+- **Фирменная плитка DN1Sup в шапке GUI** — та же плитка, что в каталоге
+  Extension Store (цветной квадрат, знак с «воздухом»); работает в светлой
+  и тёмной теме. Источник — `dn1sup_extensions` (`tools/make_icons.rb`).
 ## [0.14.6] — 2026-10-16
 
 ### DN1Sup Save Settings (v0.14.6)
