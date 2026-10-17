@@ -74,8 +74,7 @@ module Dn1supSaveSettings
   PAGE_URL = "https://github.com/#{REPO}/releases".freeze
   # Папка разработки задана в самом расширении (корень репозитория):
   # проверка обновления сначала смотрит её, потом GitHub.
-  DEV_DIR  = File.expand_path('../..', PLUG_ROOT).freeze
-  MANIFEST = { id: ID, repo: REPO, version: VERSION, asset: ASSET, dev_dir: DEV_DIR }.freeze
+  MANIFEST = { id: ID, repo: REPO, version: VERSION, asset: ASSET }.freeze
 
   class Error < StandardError; end
 
@@ -176,7 +175,7 @@ module Dn1supSaveSettings
       $dn1sup_ss_update_timer_id = UI.start_timer(15, false) do
         $dn1sup_ss_update_timer_id = nil
         begin
-          Dn1sup::Updater.check_local_first!(Dn1supSaveSettings::MANIFEST.merge(async: true))
+          Dn1sup::Updater.check!(Dn1supSaveSettings::MANIFEST.merge(async: true))
         rescue StandardError => e
           Log.exception(e, 'фоновая проверка обновлений')
           nil
