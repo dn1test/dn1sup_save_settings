@@ -116,6 +116,36 @@ module Dn1supSaveSettings
       end
     end
 
+    test 'archiver: scan_native находит .so/.dll и молчит без лога' do
+      skip('tar.exe недоступен') unless Archiver.available?
+
+      Dir.mktmpdir do |root|
+        src = File.join(root, 'src')
+        FileUtils.mkdir_p(File.join(src, 'Plugins', 'x64'))
+        File.write(File.join(src, 'Plugins', 'tool.rb'), 'x=1')
+        File.write(File.join(src, 'Plugins', 'x64', 'native.so'), 'so')
+        File.write(File.join(src, 'Plugins', 'lib.dll'), 'dll')
+        File.write(File.join(src, 'Plugins', 'crypt.rbe'), 'rbe')
+
+        zip = File.join(root, 'out.zip')
+        Archiver.create({ 'created_at' => '2026-10-26 12:00:00' },
+                        [{ scope: 'roaming', name: 'Plugins', src: File.join(src, 'Plugins') }], zip)
+        native = Archiver.scan_native(zip)
+        assert_equal ['Plugins/lib.dll', 'Plugins/x64/native.so'], native, "нативные найдены: #{native.inspect}"
+
+        # Архив без лога — nil, а не ошибка.
+        Dir.mktmpdir do |tmp|
+          File.write(File.join(tmp, 'whatever.txt'), 'no log here')
+          old_zip = File.join(root, 'old.zip')
+          _out, _err, st = Open3.capture3('tar', '-acf', old_zip, '-C', tmp, 'whatever.txt')
+          assert st.success?, 'не удалось собрать тестовый zip без лога'
+          assert_nil Archiver.scan_native(old_zip), 'без лога → nil'
+        end
+
+        assert_nil Archiver.scan_native(File.join(root, 'missing.zip')), 'отсутствующий архив → nil'
+      end
+    end
+
     test 'archiver: симлинки разыменовываются содержимым, битые пропускаются' do
       skip('tar.exe недоступен') unless Archiver.available?
 

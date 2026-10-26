@@ -137,6 +137,33 @@ module Dn1supSaveSettings
       end
     end
 
+    test 'deferred: повторный arm! — новый armed_id (старый helper отойдёт)' do
+      skip('тест только для Windows') unless Gem.win_platform?
+
+      Dir.mktmpdir do |root|
+        _roaming, _local, _store = with_env(root)
+        begin
+          src = File.join(root, 'src')
+          FileUtils.mkdir_p(src)
+          priv = File.join(src, 'PrivatePreferences.json')
+          File.write(priv, '{"v":1}')
+          entry = { target: Paths::TARGETS.find { |t| t[:key] == 'private_prefs' }, src: priv }
+
+          dir = DeferredApply.arm!([entry], spawn_process: false)
+          id1 = JSON.parse(File.read(File.join(dir, DeferredApply::PENDING_FILE)))['armed_id']
+          assert id1 && !id1.to_s.empty?, 'armed_id записан в pending.json'
+
+          dir2 = DeferredApply.arm!([entry], spawn_process: false)
+          id2 = JSON.parse(File.read(File.join(dir2, DeferredApply::PENDING_FILE)))['armed_id']
+          assert_equal dir, dir2, 'pending-папка одна'
+          assert id2 != id1, 'повторный arm даёт новый armed_id'
+          DeferredApply.cancel!
+        ensure
+          clear_env!
+        end
+      end
+    end
+
     test 'deferred: чтение result.txt (с BOM) и clear_result!' do
       skip('тест только для Windows') unless Gem.win_platform?
 

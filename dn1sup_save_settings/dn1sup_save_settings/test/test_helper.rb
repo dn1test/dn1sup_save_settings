@@ -86,13 +86,18 @@ module Dn1supSaveSettings
       end
 
       # Запуск с журналом во временной папке (см. шапку файла).
-      alias_method :run_without_test_log_scope!, :run!
-      def run!
-        old = ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR']
-        ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR'] ||= File.join(Dir.tmpdir, 'dn1sup_ss_test_logs')
-        run_without_test_log_scope!
-      ensure
-        old.nil? ? ENV.delete('DN1SUP_SAVE_SETTINGS_LOG_DIR') : ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR'] = old
+      # Guard от повторной загрузки: ext_test грузит хелпер через load (не
+      # require), и без guard второй прогон в одной сессии зацикливал бы
+      # обёртку (alias захватывал бы саму обёртку) → SystemStackError.
+      unless respond_to?(:run_without_test_log_scope!)
+        alias_method :run_without_test_log_scope!, :run!
+        def run!
+          old = ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR']
+          ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR'] ||= File.join(Dir.tmpdir, 'dn1sup_ss_test_logs')
+          run_without_test_log_scope!
+        ensure
+          old.nil? ? ENV.delete('DN1SUP_SAVE_SETTINGS_LOG_DIR') : ENV['DN1SUP_SAVE_SETTINGS_LOG_DIR'] = old
+        end
       end
     end
   end

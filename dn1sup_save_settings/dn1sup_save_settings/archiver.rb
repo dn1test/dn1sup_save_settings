@@ -91,7 +91,39 @@ module Dn1supSaveSettings
     # пропускаются с предупреждением в журнал; пути пропущенных
     # накапливаются в skipped (тот же массив, что передан caller'ом).
     # Возвращает массив skipped.
+    #
+    # Повторы при EACCES/EPERM: живые файлы во временных каталогах иногда
+    # заняты антивирусом на доли секунды (свежераспакованный .rbe в staging
+    # перед восстановлением) — до 3 попыток с паузой вместо мгновенного
+    # падения всего бэкапа/восстановления.
     def copy_tree(src, dest, seen = nil, skipped = nil)
+      tries = 0
+      begin
+        # Свежие seen/skipped на каждую попытку: частично заполненные
+        # за упавшую попытку иначе давали бы ложные «циклы» и дубли.
+        # Успешный результат синхронизируется обратно в переданные массивы
+        # (вызывающие — Archiver.create/Backup::Job — читают skipped для лога).
+        s = (seen || {}).dup
+        k = (skipped || []).dup
+        result = copy_tree_impl(src, dest, s, k)
+        seen.clear.merge!(s) if seen
+        skipped.clear.concat(k) if skipped
+        result
+      rescue Errno::EACCES, Errno::EPERM => e
+        tries += 1
+        if tries < 3
+          Log.warn("Повтор копирования (#{src}): #{e.class} — попытка #{tries + 1}/3")
+          sleep(0.2 * tries)
+          retry
+        end
+        raise
+      end
+    end
+
+    # Собственно обход дерева (см. copy_tree: контракт и повторы).
+    # Рекурсия идёт напрямую через copy_tree_impl — единый конверт повторов
+    # сверху, без умножения попыток на каждом уровне.
+    def copy_tree_impl(src, dest, seen = nil, skipped = nil)
       seen ||= {}
       skipped ||= []
       if File.symlink?(src)
@@ -115,7 +147,7 @@ module Dn1supSaveSettings
           seen[key] = true
           FileUtils.mkdir_p(dest)
           Dir.children(real).each do |child|
-            copy_tree(File.join(real, child), File.join(dest, child), seen, skipped)
+            copy_tree_impl(File.join(real, child), File.join(dest, child), seen, skipped)
           end
         else
           FileUtils.mkdir_p(File.dirname(dest))
@@ -136,7 +168,7 @@ module Dn1supSaveSettings
         seen[key] = true
         FileUtils.mkdir_p(dest)
         Dir.children(src).each do |child|
-          copy_tree(File.join(src, child), File.join(dest, child), seen, skipped)
+          copy_tree_impl(File.join(src, child), File.join(dest, child), seen, skipped)
         end
       else
         FileUtils.mkdir_p(File.dirname(dest))
@@ -209,6 +241,39 @@ module Dn1supSaveSettings
     rescue StandardError => e
       Log.warn("Не удалось получить список записей архива (#{zip_path}): #{e.class}: #{e.message}")
       []
+    end
+
+    # Расширения нативных бинарников: собраны под конкретные Ruby/SketchUp
+    # и чаще всего НЕ работают после переноса в другую версию.
+    # .rbe сюда не входит: подписанный шифрованный Ruby грузится везде.
+    NATIVE_EXTS = %w[.so .dll .bundle .dylib].freeze
+
+    # Нативные бинарники из лога архивации (для предупреждения о переносе
+    # между версиями SketchUp). Состав берётся из лога, а не из распаковки
+    # списка: внутри SketchUp stdout дочерних процессов пуст (см. list).
+    # [] — нативных нет; nil — лога нет (старый формат) или архив не читается.
+    def scan_native(zip_path)
+      log = read_log(zip_path)
+      return nil if log.nil?
+
+      found = []
+      section = ''
+      log.each_line do |line|
+        # Заголовок секции записи: «[roaming] Plugins — папка». Файлы ниже
+        # него перечислены относительно неё — запоминаем префикс.
+        if (m = line.strip.match(/\A\[(?<scope>[^\]]+)\]\s+(?<name>.+?)\s+—\s+(?:папка|файл)\s*\z/))
+          section = "#{m[:name]}/"
+          next
+        end
+        rel = line.strip.sub(/\s+—\s+\d+\z/, '')
+        next if rel == line.strip
+
+        found << "#{section}#{rel}" if NATIVE_EXTS.include?(File.extname(rel).downcase)
+      end
+      found.uniq.sort
+    rescue StandardError => e
+      Log.warn("Не удалось проверить нативные бинарники (#{File.basename(zip_path.to_s)}): #{e.class}: #{e.message}")
+      nil
     end
 
     private

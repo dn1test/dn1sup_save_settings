@@ -164,13 +164,17 @@ module Dn1supSaveSettings
       when 'open_backups_folder'
         safe { WinShell.open_folder(Store.backups_dir) }
       when 'reveal_backup'
-        safe { WinShell.reveal(Store.resolve_archive(param.to_s)) }
+        reveal_backup(dlg, param)
       when 'open_store_file'
         safe { WinShell.reveal(HistoryStore.path) }
       when 'choose_archive_dir'
         choose_archive_dir(dlg)
       when 'reset_archive_dir'
         safe { Settings.reset_archive_dir! }
+        push_state(dlg)
+      when 'set_restore_relaunch'
+        payload = parse_json(param)
+        safe { Settings.set_restore_relaunch!(payload['value'] != false) }
         push_state(dlg)
       when 'reset_target'
         reset_target(dlg, param)
@@ -279,12 +283,15 @@ module Dn1supSaveSettings
     end
 
     # param: {file: 'dn1sup_settings_….zip', auto_backup: true,
-    #         keys: [...]|null, relaunch: true|false} — подтверждение происходит
-    # в интерфейсе. Восстановление целиком отложенное — и файлы настроек, и
+    #         keys: [...]|null, relaunch: true|false, store_year: '2024'|null} —
+    #         подтверждение происходит в интерфейсе. store_year — блок версии,
+    #         из которого восстанавливают (архив ищется и в чужом хранилище).
+    #         Восстановление целиком отложенное — и файлы настроек, и
     # каталоги применяются после закрытия SketchUp (см. DeferredApply).
     def restore_backup(dlg, param)
       payload = parse_json(param)
-      zip_path = Store.resolve_archive(payload['file'].to_s)
+      file, store_year = file_and_year(param, payload)
+      zip_path = Store.resolve_archive(file, store_year)
       relaunch = payload.key?('relaunch') ? payload['relaunch'] != false : Settings.restore_relaunch
       result = safe do
         Restorer.restore!(zip_path,
@@ -373,14 +380,20 @@ module Dn1supSaveSettings
     end
 
     def delete_backup(dlg, param)
-      file = param.to_s
-      zip_path = Store.resolve_archive(file)
+      payload = parse_json(param)
+      file, store_year = file_and_year(param, payload)
+      zip_path = Store.resolve_archive(file, store_year)
       safe do
-        # Разрешено удалять только файлы в папках архивов (без обхода путей).
+        # Разрешено удалять только файлы в папках архивов (без обхода путей):
+        # текущей версии, других лет и кастомной.
         safe_file = File.expand_path(zip_path)
-        allowed = Store.archive_search_dirs.map { |d| File.expand_path(d) }
+        allowed = defined?(Dn1supSaveSettings::VersionStores) ? VersionStores.allowed_dirs : Store.archive_search_dirs.map { |d| File.expand_path(d) }
         File.delete(safe_file) if allowed.include?(File.dirname(safe_file)) && File.file?(safe_file)
-        HistoryStore.remove(file)
+        if defined?(Dn1supSaveSettings::VersionStores)
+          VersionStores.remove(file, store_year)
+        else
+          HistoryStore.remove(file)
+        end
       end
       push_state(dlg)
     end
@@ -411,26 +424,33 @@ module Dn1supSaveSettings
       push_state(dlg)
     end
 
-    # param: file — состав архива для окна подтверждения восстановления.
+    # param: file или {file, store_year} — состав архива для окна
+    # подтверждения восстановления (архив может лежать в чужом хранилище).
     def read_archive_info(dlg, param)
-      zip_path = Store.resolve_archive(param.to_s)
+      payload = parse_json(param)
+      file, store_year = file_and_year(param, payload)
+      zip_path = Store.resolve_archive(file, store_year)
       manifest = safe { Archiver.read_manifest(zip_path) }
       if manifest
         push_result(dlg, 'archive_info',
-                    'file' => param.to_s,
+                    'file' => file,
+                    'store_year' => store_year.to_s,
                     'manifest' => manifest,
+                    'native' => safe { Archiver.scan_native(zip_path) },
                     'exists' => File.file?(zip_path))
       else
         push_result(dlg, 'error', 'message' => 'Не удалось прочитать манифест архива')
       end
     end
 
-    # param: file — лог архивации из архива (читается по кнопке «Лог»).
+    # param: file или {file, store_year} — лог архивации из архива
+    # (читается по кнопке «Лог»).
     # log: nil — в архиве нет лога (архив старой версии расширения или чужой);
     # это не ошибка — окно открывается с пояснением.
     def read_archive_log(dlg, param)
-      file = param.to_s
-      zip_path = Store.resolve_archive(file)
+      payload = parse_json(param)
+      file, store_year = file_and_year(param, payload)
+      zip_path = Store.resolve_archive(file, store_year)
       unless File.file?(zip_path)
         push_result(dlg, 'error', 'message' => "Архив не найден на диске: #{file}")
         return
@@ -440,6 +460,13 @@ module Dn1supSaveSettings
                   'file' => file,
                   'exists' => true,
                   'log' => safe { Archiver.read_log(zip_path) })
+    end
+
+    # param: file или {file, store_year} — показать архив в Проводнике.
+    def reveal_backup(dlg, param)
+      payload = parse_json(param)
+      file, store_year = file_and_year(param, payload)
+      safe { WinShell.reveal(Store.resolve_archive(file, store_year)) }
     end
 
     # -- пуш в диалог ------------------------------------------------------------
@@ -460,6 +487,7 @@ module Dn1supSaveSettings
           'user' => Paths.username,
           'targets' => Paths.states,
           'history' => HistoryStore.list,
+          'history_by_version' => defined?(Dn1supSaveSettings::VersionStores) ? VersionStores.list : [],
           'pending_restore' => DeferredApply.state,
           'restore_relaunch' => Settings.restore_relaunch
         }
@@ -514,6 +542,16 @@ module Dn1supSaveSettings
       JSON.parse(text.to_s)
     rescue JSON::ParserError
       {}
+    end
+
+    # param действий с архивом: старый формат — голая строка с именем файла,
+    # новый — JSON {file, store_year}. Возвращает [file, store_year|nil].
+    def file_and_year(raw, payload)
+      if payload.is_a?(Hash) && payload['file']
+        [payload['file'].to_s, payload['store_year'].to_s.empty? ? nil : payload['store_year'].to_s]
+      else
+        [raw.to_s, nil]
+      end
     end
   end
 end

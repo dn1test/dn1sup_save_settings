@@ -23,7 +23,7 @@ end
 # Ошибка логируется и пробрасывается дальше — SketchUp покажет её как обычно.
 require File.join(File.dirname(__FILE__), 'log')
 begin
-  %w[store settings paths win_process archiver history_store backup deferred_apply restorer win_shell dialog].each do |name|
+  %w[store settings paths win_process archiver history_store version_stores backup deferred_apply restorer win_shell dialog].each do |name|
     require File.join(File.dirname(__FILE__), "#{name}.rb")
   end
 rescue Exception => e # rubocop:disable Lint/RescueException
@@ -33,18 +33,23 @@ end
 begin
   dev_file = File.join(File.dirname(__FILE__), 'dev_updater.rb')
   require dev_file if File.file?(dev_file)
-rescue StandardError, LoadError => e
+rescue Exception => e # rubocop:disable Lint/RescueException
   Log.exception(e, 'загрузка dev_updater')
   nil
 end
 
 # Общий модуль автообновления dn1sup_updater.rb кладётся в пакет при упаковке
 # (tools/pack.rb monorepo dn1sup_extensions); в dev-копии его нет.
-# LoadError не наследуется от StandardError — ловим явно (SU2026+ пробрасывает).
+# Проверка File.file? обязательна: стартовый загрузчик SketchUp (замечено
+# в 2024: «Could not find included file») на отсутствие файла отвечает
+# исключением мимо rescue LoadError/StandardError и валит всё расширение.
+# rescue Exception здесь безопасен: апдейтер опционален, все вызовы идут
+# через defined?(Dn1sup::Updater).
 if defined?(Sketchup) && Sketchup.respond_to?(:require)
   begin
-    Sketchup.require 'dn1sup_save_settings/dn1sup_updater'
-  rescue LoadError, StandardError
+    updater_file = File.join(File.dirname(__FILE__), 'dn1sup_updater.rb')
+    Sketchup.require 'dn1sup_save_settings/dn1sup_updater' if File.file?(updater_file)
+  rescue Exception # rubocop:disable Lint/RescueException
     nil
   end
 end
@@ -59,7 +64,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.14.10'.freeze
+  VERSION   = '0.15.0'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup

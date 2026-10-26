@@ -10,8 +10,12 @@
 # или блокируются. arm! складывает цели (файлы И каталоги) в pending-папку
 # хранилища и запускает ОТСОЕДИНЁННЫЙ PowerShell-скрипт, который:
 #   1) запоминает путь и имя процесса SketchUp (пока жив);
-#   2) опросом Get-Process дожидается закрытия ВСЕХ экземпляров SketchUp —
-#      второй запущенный экземпляр держал бы те же файлы;
+#   2) опросом Get-Process дожидается закрытия экземпляров ТОЙ ЖЕ установки
+#      SketchUp (сравнение по пути исполняемого файла) — второй запущенный
+#      экземпляр той же версии держал бы те же файлы; другие версии
+#      (2024/2025/2026) не ждут друг друга. Повторный arm!/arm_reset!
+#      пересоздаёт pending.json с новым su_pid — старый helper, увидев чужой
+#      su_pid, тихо выходит вместо двойного применения;
 #   3) делает страховочную копию текущих файлов в pre_restore_<штамп>/;
 #   4) выполняет действия по каждой цели: copy — копирует staged-файл или
 #      каталог поверх текущего (каталог — слиянием, по элементам), файл
@@ -178,6 +182,10 @@ module Dn1supSaveSettings
         'kind'             => kind.to_s,
         'created_at'       => Time.now.strftime('%Y-%m-%d %H:%M:%S'),
         'su_pid'           => Process.pid,
+        # Уникальный id задачи: повторный arm из ТОЙ ЖЕ сессии (тот же pid)
+        # helper отличает по нему и тихо выходит вместо двойного применения
+        # и двойного перезапуска SketchUp (см. Test-Superseded в скрипте).
+        'armed_id'         => "#{Process.pid}-#{Time.now.strftime('%Y%m%d%H%M%S%6N')}",
         'su_version'       => Paths.su_version,
         'archive'          => archive.to_s,
         'relaunch'         => relaunch ? true : false,
@@ -198,7 +206,7 @@ module Dn1supSaveSettings
 
       Log.info("Подготовлено отложенное применение: kind=#{kind}, цели=#{prepared.map { |e| e[:target][:name] }.join(', ')}, " \
                "relaunch=#{relaunch}, запуск helper=#{spawn_process}")
-      launch_script!(dir) if spawn_process
+      launch_script!(dir, config['armed_id']) if spawn_process
       dir
     end
 
@@ -260,7 +268,7 @@ module Dn1supSaveSettings
       end
     end
 
-    def launch_script!(dir)
+    def launch_script!(dir, armed_id)
       script = File.join(dir, SCRIPT_NAME)
       # Полный путь к Windows PowerShell 5.1 — как у tar.exe в archiver.rb,
       # детерминированно вместо поиска по PATH.
@@ -268,7 +276,8 @@ module Dn1supSaveSettings
                      'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe').tr('/', '\\')
       args = [ps, '-NoProfile', '-ExecutionPolicy', 'Bypass',
               '-WindowStyle', 'Hidden', '-File', script,
-              '-SuPid', Process.pid.to_s, '-PendingDir', dir]
+              '-SuPid', Process.pid.to_s, '-PendingDir', dir,
+              '-ArmedId', armed_id.to_s]
       # WinProcess.run_detached: скрытый запуск без ожидания. Отдельная
       # группа процессов из прежнего new_pgroup не нужна — у консольного
       # ребёнка GUI-процесса и так своя консоль, а дочерние процессы Windows
@@ -290,6 +299,7 @@ module Dn1supSaveSettings
       param(
           [int]$SuPid = 0,
           [string]$PendingDir = '',
+          [string]$ArmedId = '',
           [switch]$DontWaitAll
       )
 
@@ -309,21 +319,62 @@ module Dn1supSaveSettings
           if ($proc.ProcessName) { $suName = $proc.ProcessName }
       }
 
-      # Wait until EVERY instance is closed (not only the armed one): SketchUp
-      # rewrites preferences at exit and keeps plugin files locked, so a second
-      # running instance would break both clearing and copying. Polling:
-      # Wait-Process -Timeout accepts at most 32767 seconds, we need a full day.
-      # DontWaitAll — тестовый режим: применять не дожидаясь SketchUp.
+      # Wait until every instance OF THE SAME INSTALLATION is closed (not only
+      # the armed one): SketchUp rewrites preferences at exit and keeps plugin
+      # files locked, so a second running instance would break both clearing
+      # and copying. Other SketchUp VERSIONS (2024 vs 2025/2026) use different
+      # executables and hold different profile files — waiting for them blocked
+      # cross-version restores forever while several versions were open, so
+      # they are filtered out by executable path ($suExe, remembered above).
+      # A newer arm!/arm_reset! replaces pending.json (fresh su_pid): an older
+      # helper watching the same folder stands down instead of applying twice.
+      # Polling: Wait-Process -Timeout accepts at most 32767 seconds, we need
+      # a full day. DontWaitAll — тестовый режим: применять не дожидаясь SketchUp.
+      function Test-SuAlive {
+          $procs = @(Get-Process -Name $suName -ErrorAction SilentlyContinue)
+          if ($procs.Count -eq 0) { return $false }
+          if (-not $suExe) { return $true }
+          foreach ($p in $procs) {
+              $pp = $null
+              try { $pp = $p.Path } catch { return $true }
+              if (-not $pp) {
+                  try { $pp = $p.MainModule.FileName } catch { return $true }
+              }
+              if (-not $pp) { return $true }
+              if ([string]$pp -ieq [string]$suExe) { return $true }
+          }
+          return $false
+      }
+      function Test-Superseded {
+          # DontWaitAll — тестовый прогон скрипта напрямую (run_helper_script
+          # в тестах передаёт заведомо мёртвый SuPid): замены не отслеживаем,
+          # применяем безусловно.
+          if ($DontWaitAll) { return $false }
+          try {
+              $c = Get-Content -LiteralPath $pendingFile -Raw -Encoding UTF8 | ConvertFrom-Json
+              if ($c) {
+                  $cid = $null
+                  if ($c.PSObject.Properties['armed_id']) { $cid = [string]$c.armed_id }
+                  if ($cid -and $ArmedId) {
+                      if ($cid -ne $ArmedId) { return $true }
+                      return $false
+                  }
+                  if ($c.su_pid -and ([int]$c.su_pid) -ne $SuPid) { return $true }
+              }
+          } catch { }
+          return $false
+      }
+      if (Test-Superseded) { exit 0 }
       if (-not $DontWaitAll) {
           $deadline = (Get-Date).AddSeconds(86400)
           while ((Get-Date) -lt $deadline) {
-              $alive = @(Get-Process -Name $suName -ErrorAction SilentlyContinue)
-              if ($alive.Count -eq 0) { break }
+              if (Test-Superseded) { exit 0 }
+              if (-not (Test-SuAlive)) { break }
               Start-Sleep -Milliseconds 500
           }
-          $stillAlive = @(Get-Process -Name $suName -ErrorAction SilentlyContinue)
-          if ($stillAlive.Count -gt 0) { exit 0 }
+          if (Test-SuAlive) { exit 0 }
       }
+      if (Test-Superseded) { exit 0 }
       if (-not (Test-Path -LiteralPath $pendingFile)) { exit 0 }
 
       $cfg = $null

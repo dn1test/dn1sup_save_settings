@@ -38,6 +38,7 @@ const state = reactive({
   user: '',
   targets: [],   // [{key,label,scope,kind,name,path,exists,size,modified}]
   history: [],   // [{file,created_at,comment,kind,size,su_version,paths,labels}]
+  historyByVersion: [], // [{year,current,store_exists,backups_path,count,history:[...store_year,available]}]
   busy: null,    // 'create' | 'restore' | null — длительные операции
   progress: null, // {stage,label,current,total,percent} — прогресс создания копии
   toast: null,   // { kind: 'ok' | 'err', text }
@@ -143,6 +144,7 @@ if (typeof window !== 'undefined') {
     state.user = payload.user || ''
     state.targets = payload.targets || []
     state.history = payload.history || []
+    state.historyByVersion = payload.history_by_version || []
     state.pendingRestore = payload.pending_restore || null
     state.restoreRelaunch = payload.restore_relaunch !== false
     state.showHelp = !!payload.show_help
@@ -206,14 +208,15 @@ export function createBackup(comment, keys) {
 }
 
 /** Восстановление из архива хранилища. keys — null (все из архива) или массив.
- *  relaunch — запускать SketchUp после отложенного применения файлов настроек. */
-export function restoreBackup(file, autoBackup, keys = null, relaunch = true) {
+ *  relaunch — запускать SketchUp после отложенного применения файлов настроек.
+ *  storeYear — блок версии, из которого восстанавливают (чужое хранилище). */
+export function restoreBackup(file, autoBackup, keys = null, relaunch = true, storeYear = null) {
   if (isMock) {
     applyMockAction('restore_backup', { file, auto_backup: autoBackup, relaunch })
     return
   }
   state.busy = 'restore'
-  callRubyJson('restore_backup', { file, auto_backup: !!autoBackup, keys, relaunch: !!relaunch })
+  callRubyJson('restore_backup', { file, auto_backup: !!autoBackup, keys, relaunch: !!relaunch, store_year: storeYear || '' })
 }
 
 /** Отменяет отложенное применение файлов настроек (пока SketchUp открыт). */
@@ -235,12 +238,12 @@ export function dismissRestoreResult() {
   callRuby('dismiss_restore_result')
 }
 
-export function deleteBackup(file) {
+export function deleteBackup(file, storeYear = null) {
   if (isMock) {
     applyMockAction('delete_backup', { file })
     return
   }
-  callRuby('delete_backup', file)
+  callRubyJson('delete_backup', { file, store_year: storeYear || '' })
 }
 
 /** Импорт внешнего zip-архива (диалог выбора открывает Ruby). */
@@ -253,14 +256,14 @@ export function importZip() {
 }
 
 /** Состав архива для окна подтверждения восстановления. */
-export function readArchiveInfo(file) {
+export function readArchiveInfo(file, storeYear = null) {
   return new Promise((resolve) => {
     if (isMock) {
       setTimeout(() => resolve(applyMockAction('archive_info', { file })), 100)
       return
     }
     archiveInfoResolver = resolve
-    callRuby('read_archive_info', file)
+    callRubyJson('read_archive_info', { file, store_year: storeYear || '' })
     // страховка: если ответ не пришёл за 30 секунд — отпускаем
     setTimeout(() => {
       if (archiveInfoResolver === resolve) archiveInfoResolver = null
@@ -269,14 +272,14 @@ export function readArchiveInfo(file) {
 }
 
 /** Лог архивации из архива (log: null — в архиве нет лога, старый формат). */
-export function readArchiveLog(file) {
+export function readArchiveLog(file, storeYear = null) {
   return new Promise((resolve) => {
     if (isMock) {
       setTimeout(() => resolve(applyMockAction('archive_log', { file })), 100)
       return
     }
     archiveLogResolver = resolve
-    callRuby('read_archive_log', file)
+    callRubyJson('read_archive_log', { file, store_year: storeYear || '' })
     // страховка: если ответ не пришёл за 30 секунд — отпускаем
     setTimeout(() => {
       if (archiveLogResolver === resolve) archiveLogResolver = null
@@ -301,6 +304,12 @@ export function resetArchiveDir() {
   callRuby('reset_archive_dir')
 }
 
+/** Запоминает выбор «запускать SketchUp после применения» для будущих восстановлений. */
+export function setRestoreRelaunch(value) {
+  if (isMock) { applyMockAction('set_restore_relaunch', { value: !!value }); return }
+  callRubyJson('set_restore_relaunch', { value: !!value })
+}
+
 /** Сброс целей к заводским настройкам (keys: ['private_prefs', 'plugins', …]).
  *  Ruby принудительно создаёт резервную копию, применение — сразу после
  *  закрытия SketchUp; SketchUp закрывается сам и запускается снова. */
@@ -314,9 +323,9 @@ export function resetTargets(keys) {
   callRubyJson('reset_target', { keys: list })
 }
 
-export function revealBackup(file) {
+export function revealBackup(file, storeYear = null) {
   if (isMock) { toast('ok', file); return }
-  callRuby('reveal_backup', file)
+  callRubyJson('reveal_backup', { file, store_year: storeYear || '' })
 }
 
 // Проверка обновления: только GitHub-релиз.

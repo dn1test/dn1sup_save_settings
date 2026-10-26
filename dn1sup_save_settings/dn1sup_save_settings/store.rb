@@ -45,10 +45,13 @@ module Dn1supSaveSettings
 
     # Полный путь архива по имени: ищется в активной папке, затем в стандартной;
     # если файла нет нигде — путь в активной папке (для сообщений об ошибке).
-    def resolve_archive(file_name)
+    # store_year сужает поиск до хранилища одной версии SketchUp (см.
+    # VersionStores): восстановление/удаление чужих копий.
+    def resolve_archive(file_name, store_year = nil)
       name = File.basename(file_name.to_s)
-      found = archive_search_dirs.map { |d| File.join(d, name) }.find { |p| File.file?(p) }
-      found || File.join(backups_dir, name)
+      return File.join(backups_dir, name) unless defined?(Dn1supSaveSettings::VersionStores)
+
+      VersionStores.resolve_archive(name, store_year)
     end
 
     # Каталог пользователя SketchUp: %APPDATA%/SketchUp/SketchUp <год>.
