@@ -188,8 +188,6 @@ module Dn1supSaveSettings
     # UI::Toolbar.new возвращает существующую панель, а блок старой кнопки
     # ссылается на константу модуля — уже новый код.
     def setup_toolbar
-      # У каждого расширения DN1Sup всегда свой отдельный тулбар
-      # (общая панель DN1Sup больше не используется).
       toolbar = UI::Toolbar.new(TOOLBAR_NAME)
       return if toolbar.any? { |c| c.tooltip == CMD_TOOLTIP }
 
