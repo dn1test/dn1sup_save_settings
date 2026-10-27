@@ -39,13 +39,22 @@ module Dn1supSaveSettings
     #                  файл настроек будет перезаписан при выходе SketchUp,
     #                  каталоги — с риском частичного восстановления);
     #   spawn: false — подготовить отложенное применение, но скрипт не
-    #                  запускать (тесты).
+    #                  запускать (тесты);
+    #   allow_unknown_version: true — разрешить архив с неизвестной версией
+    #                  (только для kind 'imported': пользователь сам загрузил
+    #                  профиль через импорт). Без флага неизвестная версия —
+    #                  hard-блок;
+    #   current_version: override текущей версии SketchUp (тесты; по умолчанию
+    #                  Paths.su_version).
     def restore!(zip_path, opts = {})
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       Log.info("Восстановление из архива: #{File.basename(zip_path.to_s)}, пути=#{Array(opts[:keys]).inspect}, " \
                "авто-бэкап=#{opts[:auto_backup] != false}, отложенно=#{opts[:defer_files] != false}")
       manifest = Archiver.read_manifest(zip_path)
       raise Error, 'В архиве нет манифеста dn1sup_settings_manifest.json — это не архив настроек dn1sup' unless manifest
+
+      current = opts.key?(:current_version) ? opts[:current_version].to_s : Paths.su_version
+      VersionGuard.check!(manifest, current, allow_unknown: opts[:allow_unknown_version] == true)
 
       wanted = select_targets(manifest, opts[:keys])
       raise Error, 'В архиве нет выбранных путей для восстановления' if wanted.empty?

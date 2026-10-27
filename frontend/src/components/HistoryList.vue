@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ArchiveRestore, Clock3, Eye, FileText, Trash2 } from 'lucide-vue-next'
 import { state } from '../composables/useSketchupBridge'
-import { formatBytes, formatDate, kindInfo, entryTitle, storeYearOf, isForeignEntry } from '../composables/historyUtils'
+import { formatBytes, formatDate, kindInfo, entryTitle, storeYearOf, isForeignEntry, isRestoreBlocked, isDowngradeEntry } from '../composables/historyUtils'
 
 defineProps({
   entries: { type: Array, default: () => [] },
@@ -11,8 +11,15 @@ defineProps({
 
 defineEmits(['restore', 'log', 'reveal', 'del'])
 
-// Жёсткая блокировка до перезагрузки (как isLocked в App.vue):
-// пока отложенная задача активна — восстановление и удаление запрещены.
+// Запрет даунгрейда: источник новее текущей версии — кнопка
+// восстановления заблокирована (hard-блок, без обхода). Неизвестная версия —
+// блок, кроме kind 'imported' (разрешить с предупреждением в модалке).
+function entryBlocked(entry) {
+  return isRestoreBlocked(entry)
+}
+function entryDowngrade(entry) {
+  return isDowngradeEntry(entry)
+}
 const locked = computed(() => {
   const p = state.pendingRestore
   return !!p && p.from_current_session && !p.result
@@ -38,12 +45,19 @@ const locked = computed(() => {
         >
           из {{ storeYearOf(entry) }}
         </span>
+        <span
+          v-if="entryDowngrade(entry)"
+          class="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300"
+          :title="`Архив из SketchUp ${entry.su_version} новее текущей ${state.suVersion} — восстановление запрещено`"
+        >
+          новее
+        </span>
         <span class="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">{{ formatDate(entry.created_at) }}</span>
         <span class="w-14 shrink-0 text-right text-[11px] tabular-nums text-slate-400">{{ formatBytes(entry.size) }}</span>
         <!-- Действия строки появляются при наведении; подложка повторяет фон
              строки и растворяется градиентом, гася метаданные под кнопками -->
         <div class="absolute inset-y-0 right-0 hidden group-hover/entry:flex items-center gap-1 rounded-lg pr-1.5 pl-10 bg-gradient-to-l from-slate-100/70 via-slate-100/70 to-transparent dark:from-slate-800/60 dark:via-slate-800/60">
-          <button class="ss-btn-primary !px-2 !py-1 !text-[11px]" :disabled="!state.tarOk || !!state.busy || locked" @click="$emit('restore', entry)">
+          <button class="ss-btn-primary !px-2 !py-1 !text-[11px]" :disabled="!state.tarOk || !!state.busy || locked || entryBlocked(entry)" :title="entryBlocked(entry) ? 'Архив из более новой версии SketchUp — восстановление запрещено' : 'Восстановить'" @click="$emit('restore', entry)">
             <ArchiveRestore :size="12" />
             Восстановить
           </button>
@@ -79,15 +93,25 @@ const locked = computed(() => {
           >
             из {{ storeYearOf(entry) }}
           </span>
+          <span
+            v-if="entryDowngrade(entry)"
+            class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300"
+            :title="`Архив из SketchUp ${entry.su_version} новее текущей ${state.suVersion} — восстановление запрещено`"
+          >
+            новее
+          </span>
           <span class="ml-auto text-[11px] text-slate-400 shrink-0 tabular-nums">{{ formatBytes(entry.size) }}</span>
         </div>
         <div class="mt-1 text-xs text-slate-500 dark:text-slate-400 break-words">
           <span v-if="entry.comment" class="italic">{{ entry.comment }}</span>
           <span v-else>{{ (entry.labels || []).join(', ') || '—' }}</span>
         </div>
+        <div v-if="entryBlocked(entry)" class="mt-1 text-[10px] text-red-500 dark:text-red-400">
+          Архив из более новой версии SketchUp — восстановление запрещено.
+        </div>
         <div class="mt-1.5 flex items-center gap-1">
           <span class="text-[10px] text-slate-400 mr-auto">SU {{ entry.su_version }} · путей: {{ (entry.paths || []).length }}</span>
-          <button class="ss-btn-primary !px-2.5 !py-1 !text-xs" :disabled="!state.tarOk || !!state.busy || locked" @click="$emit('restore', entry)">
+          <button class="ss-btn-primary !px-2.5 !py-1 !text-xs" :disabled="!state.tarOk || !!state.busy || locked || entryBlocked(entry)" :title="entryBlocked(entry) ? 'Архив из более новой версии SketchUp — восстановление запрещено' : 'Восстановить'" @click="$emit('restore', entry)">
             <ArchiveRestore :size="13" />
             Восстановить
           </button>

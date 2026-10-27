@@ -300,12 +300,14 @@ module Dn1supSaveSettings
 
       payload = parse_json(param)
       file, store_year = file_and_year(param, payload)
+      kind = entry_kind_for(file, store_year)
       zip_path = Store.resolve_archive(file, store_year)
       result = safe do
         Restorer.restore!(zip_path,
                           auto_backup: payload['auto_backup'] != false,
                           keys: payload['keys'],
-                          relaunch: false)
+                          relaunch: false,
+                          allow_unknown_version: kind == 'imported')
       end
       return unless result
 
@@ -382,6 +384,13 @@ module Dn1supSaveSettings
       return unless defined?(Sketchup) && Sketchup.respond_to?(:quit)
 
       Log.info('Пользователь закрывает SketchUp вручную (кнопка в баннере)')
+      # Мост гасим, пока приложение живо — его pump-таймер в проходе выхода
+      # валит SketchUp 2027 (BugSplat при закрытии, kddockwidgets).
+      begin
+        Dn1supMcp2.stop
+      rescue StandardError, NameError
+        nil
+      end
       Sketchup.quit
     end
 
@@ -432,18 +441,27 @@ module Dn1supSaveSettings
 
     # param: file или {file, store_year} — состав архива для окна
     # подтверждения восстановления (архив может лежать в чужом хранилище).
+    # В ответе — version_check {blocked, reason, unknown, downgrade} по
+    # VersionGuard (источник новее текущей = hard-блок; неизвестная версия =
+    # блок, кроме kind 'imported' — предупреждение и разрешить).
     def read_archive_info(dlg, param)
       payload = parse_json(param)
       file, store_year = file_and_year(param, payload)
+      kind = entry_kind_for(file, store_year)
       zip_path = Store.resolve_archive(file, store_year)
       manifest = safe { Archiver.read_manifest(zip_path) }
       if manifest
+        check = safe do
+          VersionGuard.check_info(manifest, Paths.su_version, allow_unknown: kind == 'imported')
+        end
         push_result(dlg, 'archive_info',
                     'file' => file,
                     'store_year' => store_year.to_s,
                     'manifest' => manifest,
                     'native' => safe { Archiver.scan_native(zip_path) },
-                    'exists' => File.file?(zip_path))
+                    'exists' => File.file?(zip_path),
+                    'entry_kind' => kind.to_s,
+                    'version_check' => check || { 'blocked' => false })
       else
         push_result(dlg, 'error', 'message' => 'Не удалось прочитать манифест архива')
       end
@@ -557,6 +575,41 @@ module Dn1supSaveSettings
       else
         [raw.to_s, nil]
       end
+    end
+
+    # kind записи истории архива ('manual'/'auto'/'imported'/… или nil):
+    # текущее хранилище + чужие годы. Нужно для VersionGuard: неизвестная
+    # версия разрешена только архивам kind 'imported'.
+    def entry_kind_for(file, store_year)
+      name = File.basename(file.to_s)
+      return nil if name.empty?
+
+      if store_year && !store_year.to_s.empty?
+        if store_year.to_s == Paths.su_year.to_s
+          found = HistoryStore.find(name)
+          return found['kind'].to_s if found
+        end
+        if defined?(Dn1supSaveSettings::VersionStores)
+          arr = VersionStores.read_history_for_year(store_year.to_s)
+          hit = arr.find { |e| e['file'] == name }
+          return hit['kind'].to_s if hit
+        end
+        return nil
+      end
+
+      found = HistoryStore.find(name)
+      return found['kind'].to_s if found
+
+      if defined?(Dn1supSaveSettings::VersionStores)
+        VersionStores::SUPPORTED_YEARS.each do |year|
+          arr = VersionStores.read_history_for_year(year)
+          hit = arr.find { |e| e['file'] == name }
+          return hit['kind'].to_s if hit
+        end
+      end
+      nil
+    rescue StandardError
+      nil
     end
   end
 end

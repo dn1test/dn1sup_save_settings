@@ -43,3 +43,52 @@ export function isForeignEntry(entry) {
   const y = storeYearOf(entry)
   return !!y && !!state.suYear && y !== String(state.suYear)
 }
+
+// -- запрет даунгрейда (зеркало Ruby VersionGuard) ---------------------------
+// Сравнение полных версий SketchUp ("27.0.100" vs "26.2.243"), численно по
+// компонентам; хвосты-нули равны ("27" == "27.0.0"). null — хотя бы одна
+// версия неизвестна (сравнивать нечего).
+export function parseVersion(v) {
+  const digits = String(v || '').match(/\d+/g)
+  return digits && digits.length ? digits.map(Number) : null
+}
+
+export function isUnknownVersion(v) {
+  return parseVersion(v) === null
+}
+
+export function compareVersions(a, b) {
+  const pa = parseVersion(a)
+  const pb = parseVersion(b)
+  if (!pa || !pb) return null
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] || 0
+    const y = pb[i] || 0
+    if (x < y) return -1
+    if (x > y) return 1
+  }
+  return 0
+}
+
+// Источник новее текущей — восстановление запрещено (hard-блок, без обхода).
+export function isDowngradeEntry(entry, currentVersion) {
+  const cur = currentVersion || state.suVersion
+  if (!cur || isUnknownVersion(cur)) return false
+  const src = entry?.su_version || entry?.sketchup_version || ''
+  if (isUnknownVersion(src)) return false
+  return compareVersions(src, cur) === 1
+}
+
+// Неизвестная версия источника: блок, кроме kind 'imported' (пользователь
+// сам загрузил профиль через импорт — разрешить с предупреждением).
+export function isUnknownEntryBlocked(entry) {
+  const src = entry?.su_version || entry?.sketchup_version || ''
+  return isUnknownVersion(src) && entry?.kind !== 'imported'
+}
+
+export function isRestoreBlocked(entry, currentVersion) {
+  if (!entry) return false
+  if (isDowngradeEntry(entry, currentVersion)) return true
+  return isUnknownEntryBlocked(entry)
+}

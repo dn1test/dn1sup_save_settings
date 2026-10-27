@@ -16,7 +16,9 @@ const mockTargets = [
 let mockHistory = [
   { file: 'dn1sup_settings_2027-10-05_182233.zip', created_at: '2027-10-05 18:22:33', comment: 'Перед обновлением SketchUp', kind: 'manual', size: 18_241_331, su_version: '27.0.100', paths: ['private_prefs', 'materials', 'plugins'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)', 'Расширения (Plugins)'] },
   { file: 'dn1sup_settings_auto_2027-10-05_181002.zip', created_at: '2027-10-05 18:10:02', comment: 'Автоматически перед восстановлением', kind: 'auto', size: 17_998_112, su_version: '27.0.100', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'] },
-  { file: 'dn1sup_settings_2027-10-04_090115.zip', created_at: '2027-10-04 09:01:15', comment: '', kind: 'quick', size: 9_812_004, su_version: '27.0.100', paths: ['materials', 'styles'], labels: ['Материалы (Materials)', 'Стили (Styles)'] }
+  { file: 'dn1sup_settings_2027-10-04_090115.zip', created_at: '2027-10-04 09:01:15', comment: '', kind: 'quick', size: 9_812_004, su_version: '27.0.100', paths: ['materials', 'styles'], labels: ['Материалы (Materials)', 'Стили (Styles)'] },
+  { file: 'dn1sup_settings_2027-11-01_120000.zip', created_at: '2027-11-01 12:00:00', comment: 'Из более новой сборки', kind: 'manual', size: 19_112_500, su_version: '27.1.5', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'] },
+  { file: 'dn1sup_settings_2020-01-01_000000_imported.zip', created_at: '2020-01-01 00:00:00', comment: 'Старый профиль без версии', kind: 'imported', size: 5_123_456, su_version: '', paths: ['materials'], labels: ['Материалы (Materials)'] }
 ]
 
 function targetsFor(year, variant) {
@@ -153,13 +155,43 @@ export function applyMockAction(name, params) {
   if (name === 'archive_info') {
     const entry = mockHistory.find(e => e.file === params.file) || mockHistory[0]
     const withPlugins = (entry.paths || []).includes('plugins')
+    // Мини-версия Ruby VersionGuard для mock-режима (текущая 27.0.100).
+    const parse = (v) => {
+      const d = String(v || '').match(/\d+/g)
+      return d && d.length ? d.map(Number) : null
+    }
+    const cmp = (() => {
+      const pa = parse(entry.su_version)
+      const pb = parse('27.0.100')
+      if (!pa || !pb) return null
+      const len = Math.max(pa.length, pb.length)
+      for (let i = 0; i < len; i++) {
+        const x = pa[i] || 0
+        const y = pb[i] || 0
+        if (x < y) return -1
+        if (x > y) return 1
+      }
+      return 0
+    })()
+    const unknown = parse(entry.su_version) === null
+    const blocked = cmp === 1 || (unknown && entry.kind !== 'imported')
     return {
       file: params.file,
       exists: true,
+      entry_kind: entry.kind || '',
+      version_check: {
+        blocked,
+        downgrade: cmp === 1,
+        unknown,
+        reason: cmp === 1
+          ? `Архив создан в SketchUp ${entry.su_version} — восстановление в SketchUp 27.0.100 запрещено: бэкапы можно переносить только на ту же или более новую версию.`
+          : (blocked ? 'Версию SketchUp архива определить нельзя — восстановление запрещено.' : null)
+      },
       native: withPlugins ? ['Plugins/some_extension/x64/helper.so', 'Plugins/other/lib.dll'] : [],
       manifest: {
         created_at: entry.created_at,
         sketchup_version: entry.su_version,
+        sketchup_year: entry.su_year || '2027',
         comment: entry.comment,
         paths: entry.paths,
         targets: entry.paths.map((key, i) => ({

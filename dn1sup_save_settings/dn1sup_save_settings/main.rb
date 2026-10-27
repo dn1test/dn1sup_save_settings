@@ -23,7 +23,7 @@ end
 # Ошибка логируется и пробрасывается дальше — SketchUp покажет её как обычно.
 require File.join(File.dirname(__FILE__), 'log')
 begin
-  %w[store settings paths win_process archiver history_store version_stores backup deferred_apply restorer win_shell dialog].each do |name|
+  %w[store settings paths win_process archiver history_store version_stores version_guard backup deferred_apply restorer win_shell dialog].each do |name|
     require File.join(File.dirname(__FILE__), "#{name}.rb")
   end
 rescue Exception => e # rubocop:disable Lint/RescueException
@@ -64,7 +64,7 @@ module Dn1sup
 end
 
 module Dn1supSaveSettings
-  VERSION   = '0.19.0'.freeze
+  VERSION   = '0.20.0'.freeze
   PLUG_ROOT = File.dirname(__FILE__).freeze
 
   COMMON_MENU = 'DN1Sup'.freeze          # общее меню всех расширений DN1Sup

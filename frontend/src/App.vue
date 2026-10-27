@@ -11,7 +11,7 @@ import {
   cancelPendingRestore, dismissRestoreResult, resetTargets
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
-import { formatBytes, formatDate, storeYearOf } from './composables/historyUtils'
+import { formatBytes, formatDate, storeYearOf, compareVersions, isUnknownVersion, isDowngradeEntry, isRestoreBlocked } from './composables/historyUtils'
 import Modal from './components/Modal.vue'
 import HistoryList from './components/HistoryList.vue'
 import HelpModal from './components/HelpModal.vue'
@@ -162,6 +162,7 @@ async function openRestore(entry) {
   const targets = info.manifest.targets || []
   restoreModal.value = {
     file: entry.file,
+    kind: entry.kind || '',
     store_year: storeYearOf(entry),
     created_at: info.manifest.created_at || entry.created_at,
     su_version: info.manifest.sketchup_version || entry.su_version,
@@ -170,7 +171,8 @@ async function openRestore(entry) {
     targets,
     native: info.native || [],
     selected: targets.map(t => t.key),
-    autoBackup: true
+    autoBackup: true,
+    version_check: info.version_check || null
   }
 }
 
@@ -193,11 +195,52 @@ const restoreIsPartial = computed(() => {
 function doRestore() {
   const m = restoreModal.value
   if (!m || !m.selected.length) return
+  if (restoreBlocked.value) return
   restoreModal.value = null
   // Все выбраны — null (весь архив); подмножество — явный список ключей.
   const keys = m.selected.length === (m.targets || []).length ? null : [...m.selected]
   restoreBackup(m.file, m.autoBackup, keys, m.store_year)
 }
+
+// -- запрет даунгрейда --------------------------------------------------------
+// Источник новее текущей версии — hard-блок без обхода. Ruby-вариант
+// (version_check из read_archive_info) авторитетен; клиентский пересчёт —
+// страховка, если version_check отсутствует (старый ответ/мок).
+const restoreDowngrade = computed(() => {
+  const m = restoreModal.value
+  if (!m) return false
+  if (m.version_check && typeof m.version_check.downgrade !== 'undefined') return !!m.version_check.downgrade
+  return isDowngradeEntry({ su_version: m.su_version }, state.suVersion)
+})
+const restoreUnknown = computed(() => {
+  const m = restoreModal.value
+  if (!m) return false
+  if (m.version_check && typeof m.version_check.unknown !== 'undefined') return !!m.version_check.unknown
+  return isUnknownVersion(m.su_version)
+})
+const restoreBlocked = computed(() => {
+  const m = restoreModal.value
+  if (!m) return false
+  if (m.version_check && typeof m.version_check.blocked !== 'undefined') return !!m.version_check.blocked
+  return isRestoreBlocked({ su_version: m.su_version, kind: m.kind }, state.suVersion)
+})
+const restoreBlockReason = computed(() => {
+  const m = restoreModal.value
+  if (!m) return ''
+  if (m.version_check?.reason) return m.version_check.reason
+  if (restoreDowngrade.value) {
+    return `Архив создан в SketchUp ${m.su_version} — восстановление в SketchUp ${state.suVersion} запрещено: бэкапы можно переносить только на ту же или более новую версию.`
+  }
+  if (restoreUnknown.value) {
+    return 'Версию SketchUp архива определить нельзя — восстановление запрещено (исключение: архивы, загруженные через импорт).'
+  }
+  return ''
+})
+// Неизвестная версия + imported: разрешено с предупреждением.
+const restoreUnknownAllowed = computed(() => {
+  const m = restoreModal.value
+  return !!m && restoreUnknown.value && !restoreBlocked.value
+})
 
 const hasPlugins = computed(() => (restoreModal.value?.targets || []).some(t => t.key === 'plugins'))
 const hasDirs = computed(() => (restoreModal.value?.targets || []).some(t => t.kind !== 'file'))
@@ -715,6 +758,25 @@ onMounted(loadState)
           </span>
         </div>
 
+        <div
+          v-if="restoreBlocked"
+          class="flex items-start gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200 text-[11px] leading-snug"
+        >
+          <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
+          <span>{{ restoreBlockReason }} Восстановление архива из более новой версии SketchUp запрещено.</span>
+        </div>
+
+        <div
+          v-if="restoreUnknownAllowed"
+          class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
+        >
+          <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
+          <span>
+            Версию SketchUp архива определить нельзя (архив загружен через импорт) —
+            восстановление разрешено, но на ваш риск: проверьте результат после перезапуска.
+          </span>
+        </div>
+
         <div class="mt-2 space-y-1">
           <div class="text-[10px] uppercase tracking-wide text-slate-400">Что восстановить</div>
           <label
@@ -795,7 +857,7 @@ onMounted(loadState)
       </div>
       <template #footer>
         <button class="ss-btn-ghost" @click="restoreModal = null">Отмена</button>
-        <button class="ss-btn-primary" :disabled="!!state.busy || !restoreSelectedCount || isLocked" @click="doRestore">
+        <button class="ss-btn-primary" :disabled="!!state.busy || !restoreSelectedCount || isLocked || restoreBlocked" @click="doRestore">
           <ArchiveRestore :size="14" />
           {{ restoreIsPartial ? `Восстановить выбранное (${restoreSelectedCount})` : 'Восстановить' }}
         </button>
