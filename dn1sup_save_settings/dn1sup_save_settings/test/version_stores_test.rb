@@ -14,7 +14,7 @@ module Dn1supSaveSettings
       Dir.mktmpdir do |appdata|
         ENV['DN1SUP_SAVE_SETTINGS_APPDATA_ROOT'] = appdata
         begin
-          %w[2024 2025 2026].each do |year|
+          %w[2024 2025 2026 2027].each do |year|
             dir = File.join(appdata, 'SketchUp', "SketchUp #{year}", 'dn1sup_save_settings', 'backups')
             FileUtils.mkdir_p(dir)
           end
@@ -30,7 +30,7 @@ module Dn1supSaveSettings
           ]))
 
           groups = VersionStores.list
-          assert_equal %w[2024 2025 2026], groups.map { |g| g['year'] }, 'три блока'
+          assert_equal %w[2024 2025 2026 2027], groups.map { |g| g['year'] }, 'четыре блока'
           g24 = groups.find { |g| g['year'] == '2024' }
           assert_equal 1, g24['count']
           assert_equal '2024', g24['history'].first['store_year']

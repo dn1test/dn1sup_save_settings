@@ -103,6 +103,18 @@ const totalHistoryCount = computed(() =>
   historyGroups.value.reduce((n, g) => n + (g.history || []).length, 0)
 )
 
+// Две зоны вкладок: текущая версия — слева, остальные — справа.
+// current — по флагу Ruby, fallback — первая группа.
+const currentGroup = computed(() =>
+  historyGroups.value.find(g => g.current) || historyGroups.value[0] || null
+)
+const otherGroups = computed(() =>
+  historyGroups.value
+    .filter(g => g !== currentGroup.value)
+    .slice()
+    .sort((a, b) => String(b.year).localeCompare(String(a.year)))
+)
+
 // Активная вкладка версии. Внутри вкладки — подвкладки «Настройки»
 // и «История» (выбор запоминается).
 const activeYear = ref(null)
@@ -433,28 +445,46 @@ onMounted(loadState)
       <span class="flex-1">Встроенный zip-движок (tar.exe) не найден — операции с архивами недоступны. Утилита входит в состав Windows 10 (1803+) / Windows 11.</span>
     </div>
 
-    <!-- Вкладки версий SketchUp -->
-    <div class="flex items-center gap-1 px-3 pt-2">
-      <button
-        v-for="group in historyGroups"
-        :key="group.year"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border-b-2 -mb-px transition-colors"
-        :class="activeYear === group.year
-          ? 'border-brand-500 text-slate-800 dark:text-slate-100'
-          : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
-        :title="group.current ? 'Запущенная версия' : `Настройки и копии SketchUp ${group.year}`"
-        @click="selectYear(group.year)"
-      >
-        SketchUp {{ group.year }}
-        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ (group.history || []).length }}</span>
-        <span
-          v-if="group.current"
-          class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-brand-100 text-brand-700 dark:bg-brand-900/60 dark:text-brand-300"
+    <!-- Вкладки версий SketchUp: текущая — слева, остальные — справа -->
+    <div class="flex items-stretch gap-2 px-3 pt-2">
+      <div class="flex items-center gap-1 shrink-0">
+        <button
+          v-if="currentGroup"
+          :key="currentGroup.year"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border-b-2 -mb-px transition-colors"
+          :class="activeYear === currentGroup.year
+            ? 'border-brand-500 text-slate-800 dark:text-slate-100'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
+          title="Запущенная версия"
+          @click="selectYear(currentGroup.year)"
         >
-          текущая
-        </span>
-      </button>
-      <span class="ml-auto text-[10px] text-slate-400 shrink-0">всего копий: {{ totalHistoryCount }}</span>
+          SketchUp {{ currentGroup.year }}
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ (currentGroup.history || []).length }}</span>
+          <span
+            class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-brand-100 text-brand-700 dark:bg-brand-900/60 dark:text-brand-300"
+          >
+            текущая
+          </span>
+        </button>
+      </div>
+      <div class="w-px self-stretch bg-slate-200 dark:bg-slate-700/60 shrink-0"></div>
+      <div class="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
+        <button
+          v-for="group in otherGroups"
+          :key="group.year"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap"
+          :class="activeYear === group.year
+            ? 'border-brand-500 text-slate-800 dark:text-slate-100'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
+          :title="`Настройки и копии SketchUp ${group.year}`"
+          @click="selectYear(group.year)"
+        >
+          SketchUp {{ group.year }}
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ (group.history || []).length }}</span>
+        </button>
+        <span v-if="!otherGroups.length" class="text-[10px] text-slate-400 px-1">других версий нет</span>
+      </div>
+      <span class="ml-auto text-[10px] text-slate-400 shrink-0 self-center">всего копий: {{ totalHistoryCount }}</span>
     </div>
 
     <!-- Подвкладки версии: настройки и история -->

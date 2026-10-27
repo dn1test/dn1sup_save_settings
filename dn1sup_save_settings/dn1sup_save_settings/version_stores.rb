@@ -29,7 +29,7 @@ module Dn1supSaveSettings
   module VersionStores
     extend self
 
-    SUPPORTED_YEARS = %w[2024 2025 2026].freeze
+    SUPPORTED_YEARS = %w[2024 2025 2026 2027].freeze
     ARCHIVE_PREFIX = 'dn1sup_settings_'
 
     # -- пути ------------------------------------------------------------------
@@ -312,14 +312,14 @@ module Dn1supSaveSettings
       return y if SUPPORTED_YEARS.include?(y)
 
       v = entry['su_version'].to_s
-      # major-версия 24/25/26 → год 2024/2025/2026 (SketchUp 2021+: major = год − 2000)
+      # major-версия 24/25/26/27 → год 2024/2025/2026/2027 (SketchUp 2021+: major = год − 2000)
       if v =~ /\A(\d{2,4})/
         major = Regexp.last_match(1).to_i
         guess = major >= 1000 ? major.to_s : (major >= 21 ? (2000 + major).to_s : '')
         return guess if SUPPORTED_YEARS.include?(guess)
       end
       # created_at 'YYYY-…'
-      return Regexp.last_match(1) if entry['created_at'].to_s =~ /\A(202[456])\b/ && SUPPORTED_YEARS.include?(Regexp.last_match(1))
+      return Regexp.last_match(1) if entry['created_at'].to_s =~ /\A(202[4567])\b/ && SUPPORTED_YEARS.include?(Regexp.last_match(1))
 
       entry['store_year'].to_s
     end

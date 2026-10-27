@@ -11,7 +11,7 @@
 |---|---|
 | Имя `dn1sup_*` в аккаунте `dn1test` | ✅ `dn1test/dn1sup_save_settings` |
 | Не archived | ✅ |
-| `registry.json` в корне `main` | ✅ (id, name, description, version 0.15.0) |
+| `registry.json` в корне `main` | ✅ (id, name, description, version 0.16.0) |
 | Стабильные релизы с `.rbz` | ✅ `dist/…rbz` через CI |
 | Теги `vMAJOR.MINOR.PATCH` | ✅ (workflow на `v*`) |
 | Регистратор `<id>.rb` + `ext.id` | ✅ `dn1sup_save_settings.rb`, `ext.id = 'dn1sup_save_settings'` |

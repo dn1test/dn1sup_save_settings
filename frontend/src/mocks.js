@@ -4,27 +4,27 @@
  */
 
 const mockTargets = [
-  { key: 'private_prefs', label: 'Настройки интерфейса (PrivatePreferences.json)', scope: 'local', kind: 'file', name: 'PrivatePreferences.json', path: 'C:\\Users\\User\\AppData\\Local\\SketchUp\\SketchUp 2026\\SketchUp\\PrivatePreferences.json', exists: true, size: 48213, modified: '2026-10-06 20:02' },
-  { key: 'shared_prefs', label: 'Системные настройки (SharedPreferences.json)', scope: 'roaming', kind: 'file', name: 'SharedPreferences.json', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\SharedPreferences.json', exists: true, size: 8124, modified: '2026-10-06 20:02' },
-  { key: 'components', label: 'Компоненты (Components)', scope: 'roaming', kind: 'dir', name: 'Components', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\Components', exists: true, size: 152_043_264 },
-  { key: 'materials', label: 'Материалы (Materials)', scope: 'roaming', kind: 'dir', name: 'Materials', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\Materials', exists: true, size: 25_165_824 },
-  { key: 'plugins', label: 'Расширения (Plugins)', scope: 'roaming', kind: 'dir', name: 'Plugins', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\Plugins', exists: true, size: 214_748_364 },
-  { key: 'styles', label: 'Стили (Styles)', scope: 'roaming', kind: 'dir', name: 'Styles', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\Styles', exists: false, size: 0 },
-  { key: 'templates', label: 'Шаблоны (Templates)', scope: 'roaming', kind: 'dir', name: 'Templates', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\SketchUp\\Templates', exists: true, size: 3_145_728 }
+  { key: 'private_prefs', label: 'Настройки интерфейса (PrivatePreferences.json)', scope: 'local', kind: 'file', name: 'PrivatePreferences.json', path: 'C:\\Users\\User\\AppData\\Local\\SketchUp\\SketchUp 2027\\SketchUp\\PrivatePreferences.json', exists: true, size: 48213, modified: '2026-10-06 20:02' },
+  { key: 'shared_prefs', label: 'Системные настройки (SharedPreferences.json)', scope: 'roaming', kind: 'file', name: 'SharedPreferences.json', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\SharedPreferences.json', exists: true, size: 8124, modified: '2026-10-06 20:02' },
+  { key: 'components', label: 'Компоненты (Components)', scope: 'roaming', kind: 'dir', name: 'Components', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Components', exists: true, size: 152_043_264 },
+  { key: 'materials', label: 'Материалы (Materials)', scope: 'roaming', kind: 'dir', name: 'Materials', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Materials', exists: true, size: 25_165_824 },
+  { key: 'plugins', label: 'Расширения (Plugins)', scope: 'roaming', kind: 'dir', name: 'Plugins', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Plugins', exists: true, size: 214_748_364 },
+  { key: 'styles', label: 'Стили (Styles)', scope: 'roaming', kind: 'dir', name: 'Styles', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Styles', exists: false, size: 0 },
+  { key: 'templates', label: 'Шаблоны (Templates)', scope: 'roaming', kind: 'dir', name: 'Templates', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Templates', exists: true, size: 3_145_728 }
 ]
 
 let mockRelaunch = true
 
 let mockHistory = [
-  { file: 'dn1sup_settings_2026-10-05_182233.zip', created_at: '2026-10-05 18:22:33', comment: 'Перед обновлением SketchUp', kind: 'manual', size: 18_241_331, su_version: '26.2.243', paths: ['private_prefs', 'materials', 'plugins'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)', 'Расширения (Plugins)'] },
-  { file: 'dn1sup_settings_auto_2026-10-05_181002.zip', created_at: '2026-10-05 18:10:02', comment: 'Автоматически перед восстановлением', kind: 'auto', size: 17_998_112, su_version: '26.2.243', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'] },
-  { file: 'dn1sup_settings_2026-10-04_090115.zip', created_at: '2026-10-04 09:01:15', comment: '', kind: 'quick', size: 9_812_004, su_version: '26.1.340', paths: ['materials', 'styles'], labels: ['Материалы (Materials)', 'Стили (Styles)'] }
+  { file: 'dn1sup_settings_2027-10-05_182233.zip', created_at: '2027-10-05 18:22:33', comment: 'Перед обновлением SketchUp', kind: 'manual', size: 18_241_331, su_version: '27.0.100', paths: ['private_prefs', 'materials', 'plugins'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)', 'Расширения (Plugins)'] },
+  { file: 'dn1sup_settings_auto_2027-10-05_181002.zip', created_at: '2027-10-05 18:10:02', comment: 'Автоматически перед восстановлением', kind: 'auto', size: 17_998_112, su_version: '27.0.100', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'] },
+  { file: 'dn1sup_settings_2027-10-04_090115.zip', created_at: '2027-10-04 09:01:15', comment: '', kind: 'quick', size: 9_812_004, su_version: '27.0.100', paths: ['materials', 'styles'], labels: ['Материалы (Materials)', 'Стили (Styles)'] }
 ]
 
 function targetsFor(year, variant) {
   return mockTargets.map(t => ({
     ...t,
-    path: t.path.replace(/SketchUp 2026/g, `SketchUp ${year}`),
+    path: t.path.replace(/SketchUp 2027/g, `SketchUp ${year}`),
     exists: variant === 'full' ? true : t.exists,
     size: variant === 'full' ? t.size : (t.key === 'plugins' ? 14_221_312 : t.size)
   }))
@@ -33,11 +33,22 @@ function targetsFor(year, variant) {
 export function mockPayload() {
   const byVersion = [
     {
-      year: '2026', current: true, store_exists: true,
-      backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings\\backups',
+      year: '2027', current: true, store_exists: true,
+      backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\dn1sup_save_settings\\backups',
       count: mockHistory.length,
+      targets: targetsFor('2027', 'full'),
+      history: mockHistory.map(e => ({ ...e, store_year: '2027', available: true }))
+    },
+    {
+      year: '2026', current: false, store_exists: true,
+      backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings\\backups',
+      count: 3,
       targets: targetsFor('2026', 'full'),
-      history: mockHistory.map(e => ({ ...e, store_year: '2026', available: true }))
+      history: [
+        { file: 'dn1sup_settings_2026-10-05_182233.zip', created_at: '2026-10-05 18:22:33', comment: 'Перед обновлением SketchUp', kind: 'manual', size: 18_241_331, su_version: '26.2.243', su_year: '2026', paths: ['private_prefs', 'materials', 'plugins'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)', 'Расширения (Plugins)'], store_year: '2026', available: true },
+        { file: 'dn1sup_settings_auto_2026-10-05_181002.zip', created_at: '2026-10-05 18:10:02', comment: 'Автоматически перед восстановлением', kind: 'auto', size: 17_998_112, su_version: '26.2.243', su_year: '2026', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'], store_year: '2026', available: true },
+        { file: 'dn1sup_settings_2026-10-04_090115.zip', created_at: '2026-10-04 09:01:15', comment: '', kind: 'quick', size: 9_812_004, su_version: '26.1.340', su_year: '2026', paths: ['materials', 'styles'], labels: ['Материалы (Materials)', 'Стили (Styles)'], store_year: '2026', available: true }
+      ]
     },
     {
       year: '2025', current: false, store_exists: true,
@@ -59,15 +70,15 @@ export function mockPayload() {
   ]
   return {
     version: '0.5.0-mock',
-    su_version: '26.2.243',
-    su_year: '2026',
+    su_version: '27.0.100',
+    su_year: '2027',
     tar_ok: true,
-    store_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings',
-    default_backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings\\backups',
+    store_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\dn1sup_save_settings',
+    default_backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\dn1sup_save_settings\\backups',
     archive_dir: '',
     archive_dir_custom: false,
-    backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings\\backups',
-    history_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2026\\dn1sup_save_settings\\history.json',
+    backups_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\dn1sup_save_settings\\backups',
+    history_path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\dn1sup_save_settings\\history.json',
     user: 'User',
     targets: mockTargets,
     history: mockHistory,
@@ -102,7 +113,7 @@ export function applyMockAction(name, params) {
       comment: params.comment || '',
       kind: 'manual',
       size: 12_345_678,
-      su_version: '26.2.243',
+      su_version: '27.0.100',
       paths: keys,
       labels: mockTargets.filter(t => keys.includes(t.key)).map(t => t.label)
     }
