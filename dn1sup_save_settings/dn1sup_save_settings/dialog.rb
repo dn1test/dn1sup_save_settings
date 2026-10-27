@@ -169,12 +169,10 @@ module Dn1supSaveSettings
         safe { WinShell.reveal(HistoryStore.path) }
       when 'choose_archive_dir'
         choose_archive_dir(dlg)
+      when 'quit_sketchup'
+        safe { quit_sketchup }
       when 'reset_archive_dir'
         safe { Settings.reset_archive_dir! }
-        push_state(dlg)
-      when 'set_restore_relaunch'
-        payload = parse_json(param)
-        safe { Settings.set_restore_relaunch!(payload['value'] != false) }
         push_state(dlg)
       when 'reset_target'
         reset_target(dlg, param)
@@ -283,25 +281,34 @@ module Dn1supSaveSettings
     end
 
     # param: {file: 'dn1sup_settings_….zip', auto_backup: true,
-    #         keys: [...]|null, relaunch: true|false, store_year: '2024'|null} —
+    #         keys: [...]|null, store_year: '2024'|null} —
     #         подтверждение происходит в интерфейсе. store_year — блок версии,
     #         из которого восстанавливают (архив ищется и в чужом хранилище).
     #         Восстановление целиком отложенное — и файлы настроек, и
     # каталоги применяются после закрытия SketchUp (см. DeferredApply).
+    # Автоперезапуска нет: пользователь закрывает SketchUp сам (кнопка
+    # «Закрыть SketchUp» в баннере), helper применяет задачу и НЕ запускает
+    # SketchUp снова (relaunch всегда false). Повторное восстановление до
+    # применения блокируется: новый arm заменил бы запланированную задачу.
     def restore_backup(dlg, param)
+      pending = DeferredApply.state
+      if pending && pending['from_current_session'] && !pending['result']
+        push_result(dlg, 'error',
+                    'message' => 'Восстановление уже запланировано — дождитесь перезапуска SketchUp или отмените его в баннере')
+        return
+      end
+
       payload = parse_json(param)
       file, store_year = file_and_year(param, payload)
       zip_path = Store.resolve_archive(file, store_year)
-      relaunch = payload.key?('relaunch') ? payload['relaunch'] != false : Settings.restore_relaunch
       result = safe do
         Restorer.restore!(zip_path,
                           auto_backup: payload['auto_backup'] != false,
                           keys: payload['keys'],
-                          relaunch: relaunch)
+                          relaunch: false)
       end
       return unless result
 
-      Settings.set_restore_relaunch!(relaunch) unless payload['relaunch'].nil?
       push_result(dlg, 'restore_done',
                   'restored' => result.restored,
                   'skipped' => result.skipped,
@@ -312,15 +319,16 @@ module Dn1supSaveSettings
       push_state(dlg)
     end
 
-    # param: {key: 'private_prefs'|'plugins', relaunch: true|false} — сброс
+    # param: {key: 'private_prefs'|'plugins'} — сброс
     # цели к заводскому состоянию (подтверждение — в интерфейсе). Перед сбросом
     # ПРИНУДИТЕЛЬНО создаётся резервная копия: без неё сброс не выполняется.
     # При сбросе плагинов собственные файлы расширения не удаляются
     # (keep в DeferredApply.arm_reset!) — Save Settings остаётся в меню.
-    # Сброс целей к заводскому состоянию: param — {key: 'plugins'} или
-    # {keys: ['private_prefs', 'plugins']}. Применение отложенное — отсоединённый
-    # helper выполняет его сразу после закрытия SketchUp и запускает его снова
-    # (см. DeferredApply.arm_reset!). Повторный сброс до применения блокируется:
+    # Сброс целей к заводскому состоянию: param — {keys: ['private_prefs', 'plugins']}.
+    # Применение отложенное — отсоединённый helper выполняет его сразу после
+    # закрытия SketchUp и НЕ запускает его снова (relaunch всегда false):
+    # пользователь закрывает SketchUp сам кнопкой в баннере.
+    # Повторный сброс до применения блокируется:
     # новый arm заменил бы запланированную задачу.
     def reset_target(dlg, param)
       payload = parse_json(param)
@@ -355,7 +363,7 @@ module Dn1supSaveSettings
       begin
         entry = Backup.create!(comment: "Автоматически перед сбросом: #{labels.join(', ')}",
                                keys: keys, kind: 'auto')
-        DeferredApply.arm_reset!(targets, relaunch: true)
+        DeferredApply.arm_reset!(targets, relaunch: false)
       rescue Error => e
         Log.exception(e, "сброс целей:#{keys.join(',')}")
         push_result(dlg, 'error', 'message' => e.message)
@@ -364,19 +372,17 @@ module Dn1supSaveSettings
 
       push_result(dlg, 'reset_armed', 'labels' => labels, 'backup_file' => entry['file'])
       push_state(dlg)
-      schedule_quit_for_reset!
     end
 
-    # Перезагрузка после подготовки сброса: пауза, чтобы тост «Сброс
-    # подготовлен…» и баннер отложенной задачи успели отрисоваться, затем
-    # штатный выход — при несохранённой модели SketchUp покажет диалог
-    # сохранения (отказ возможен, тогда сброс применится при фактическом
-    # закрытии), а helper запустит SketchUp снова.
-    def schedule_quit_for_reset!
-      return unless defined?(UI) && UI.respond_to?(:start_timer)
+    # Закрытие SketchUp по явной кнопке пользователя в баннере отложенной
+    # задачи («Закрыть SketchUp»). Автозакрытия больше нет: helper ждёт выхода
+    # и применяет задачу, SketchUp снова НЕ запускается. При несохранённой
+    # модели SketchUp покажет штатный диалог сохранения (отказ возможен).
+    def quit_sketchup
       return unless defined?(Sketchup) && Sketchup.respond_to?(:quit)
 
-      UI.start_timer(1.5, false) { Sketchup.quit }
+      Log.info('Пользователь закрывает SketchUp вручную (кнопка в баннере)')
+      Sketchup.quit
     end
 
     def delete_backup(dlg, param)
@@ -488,8 +494,7 @@ module Dn1supSaveSettings
           'targets' => Paths.states,
           'history' => HistoryStore.list,
           'history_by_version' => defined?(Dn1supSaveSettings::VersionStores) ? VersionStores.list : [],
-          'pending_restore' => DeferredApply.state,
-          'restore_relaunch' => Settings.restore_relaunch
+          'pending_restore' => DeferredApply.state
         }
         # Одноразовый флаг справки (пункт меню «Справка»): UI откроет окно
         # справки при получении состояния и сбросит флаг у себя.

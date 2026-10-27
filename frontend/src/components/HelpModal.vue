@@ -85,10 +85,12 @@ defineEmits(['close'])
           <span>
             Файлы настроек (<span class="font-mono">PrivatePreferences.json</span> /
             <span class="font-mono">SharedPreferences.json</span>) SketchUp перезаписывает при выходе,
-            поэтому они применяются отложенно — автоматически после закрытия SketchUp
-            (с опцией запуска его заново). Закройте ВСЕ окна SketchUp, включая другие
-            версии (2024/2025/2026): помощник ждёт их закрытия. Папки (Materials, Styles, …)
-            восстанавливаются сразу; полный эффект — после перезапуска SketchUp.
+            а файлы расширений заняты в работающем SketchUp — поэтому всё
+            применяется отложенно: закройте SketchUp сами кнопкой «Закрыть SketchUp»
+            в баннере, helper применит изменения, затем откройте SketchUp вручную.
+            Закройте ВСЕ окна SketchUp, включая другие
+            версии (2024/2025/2026): помощник ждёт их закрытия. До перезагрузки
+            настройки заблокированы.
           </span>
         </div>
       </section>
@@ -139,7 +141,9 @@ defineEmits(['close'])
           <span class="font-mono">PrivatePreferences.json</span> — вид SketchUp вернётся к заводскому;
           <span class="font-semibold">«Сброс плагинов»</span> очищает папку Plugins, кроме файлов
           самого Save Settings — расширение остаётся на месте.
-          Применение — сразу после закрытия SketchUp; перед сбросом принудительно создаётся резервная копия.
+          Применение — после того как вы сами закроете SketchUp кнопкой в баннере;
+          перед сбросом принудительно создаётся резервная копия.
+          До перезагрузки настройки заблокированы.
         </p>
         <div class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug">
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />

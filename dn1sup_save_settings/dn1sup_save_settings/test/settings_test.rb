@@ -85,21 +85,6 @@ module Dn1supSaveSettings
       end
     end
 
-    test 'settings: restore_relaunch — галочка автозапуска сохраняется' do
-      Dir.mktmpdir do |store|
-        ENV['DN1SUP_SAVE_SETTINGS_STORE_DIR'] = store
-        begin
-          assert Settings.restore_relaunch, 'по умолчанию включено'
-          assert_equal false, Settings.set_restore_relaunch!(false)
-          assert_equal false, Settings.restore_relaunch
-          assert_equal true, Settings.set_restore_relaunch!(true)
-          assert_equal true, Settings.restore_relaunch
-        ensure
-          ENV.delete('DN1SUP_SAVE_SETTINGS_STORE_DIR')
-        end
-      end
-    end
-
     test 'settings: повреждённый settings.json → стандартные значения' do
       Dir.mktmpdir do |store|
         ENV['DN1SUP_SAVE_SETTINGS_STORE_DIR'] = store

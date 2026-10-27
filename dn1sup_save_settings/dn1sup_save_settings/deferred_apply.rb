@@ -24,8 +24,10 @@
 #      плагинов: сам каталог остаётся, а элементы из списка keep — файлы
 #      самого расширения — не удаляются). Занятые файлы не валят всю цель:
 #      каждый элемент в своём try/catch, итог честный (fail с именами);
-#   5) пишет result.txt (ok|error), удаляет staged при успехе и опционально
-#      запускает SketchUp снова.
+#   5) пишет result.txt (ok|error), удаляет staged при успехе и — только если
+#      relaunch явно true — запускает SketchUp снова. Интерфейс расширения
+#      relaunch не выставляет: пользователь закрывает SketchUp сам и открывает
+#      его вручную.
 # Отмена (cancel!) удаляет pending-папку: скрипт, не найдя pending.json,
 # выходит, ничего не меняя. Повторный arm!/arm_reset! пересоздаёт папку.
 # =============================================================================
@@ -53,12 +55,13 @@ module Dn1supSaveSettings
     #                    action: 'copy'|'delete_file'|'clear_dir' (по умолчанию copy) }.
     # opts:
     #   archive:      имя архива — только для отображения в состоянии;
-    #   relaunch:     true — после применения запустить SketchUp снова;
+    #   relaunch:     false — после применения НЕ запускать SketchUp снова
+    #                     (пользователь открывает его сам); автоматики нет;
     #   auto_backup:  true — скрипт перед копированием сохранит текущие файлы
     #                     в pre_restore_<штамп>/ внутри pending-папки;
     #   spawn_process: false — только подготовка (тесты), скрипт не запускать.
     # Возвращает путь pending-папки.
-    def arm!(entries, archive: '', relaunch: true, auto_backup: true, spawn_process: true)
+    def arm!(entries, archive: '', relaunch: false, auto_backup: true, spawn_process: true)
       arm_entries(entries, kind: 'restore', archive: archive, relaunch: relaunch,
                            auto_backup: auto_backup, spawn_process: spawn_process)
     end
@@ -69,7 +72,7 @@ module Dn1supSaveSettings
     # создаёт вызывающий код (принудительно).
     # При сбросе плагинов из очистки исключаются собственные файлы
     # расширения (keep) — оно остаётся в меню после сброса.
-    def arm_reset!(target, relaunch: true, spawn_process: true)
+    def arm_reset!(target, relaunch: false, spawn_process: true)
       # Hash в Array не оборачивается, а разбирается на пары — только явная
       # проверка вида.
       targets = target.is_a?(Array) ? target : [target]

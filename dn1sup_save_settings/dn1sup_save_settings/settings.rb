@@ -58,18 +58,6 @@ module Dn1supSaveSettings
       ''
     end
 
-    # Запускать ли SketchUp после отложенного применения файлов настроек
-    # (запоминается выбор галочки в окне восстановления).
-    def restore_relaunch
-      read['restore_relaunch'] != false
-    end
-
-    def set_restore_relaunch!(value)
-      value = value ? true : false
-      write('restore_relaunch' => value)
-      value
-    end
-
     private
 
     # Обратные слэши → прямые, без хвостовых; пустые/не-строки → ''.

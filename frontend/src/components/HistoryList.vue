@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { ArchiveRestore, Clock3, Eye, FileText, Trash2 } from 'lucide-vue-next'
 import { state } from '../composables/useSketchupBridge'
 import { formatBytes, formatDate, kindInfo, entryTitle, storeYearOf, isForeignEntry } from '../composables/historyUtils'
@@ -9,6 +10,13 @@ defineProps({
 })
 
 defineEmits(['restore', 'log', 'reveal', 'del'])
+
+// Жёсткая блокировка до перезагрузки (как isLocked в App.vue):
+// пока отложенная задача активна — восстановление и удаление запрещены.
+const locked = computed(() => {
+  const p = state.pendingRestore
+  return !!p && p.from_current_session && !p.result
+})
 </script>
 
 <template>
@@ -35,7 +43,7 @@ defineEmits(['restore', 'log', 'reveal', 'del'])
         <!-- Действия строки появляются при наведении; подложка повторяет фон
              строки и растворяется градиентом, гася метаданные под кнопками -->
         <div class="absolute inset-y-0 right-0 hidden group-hover/entry:flex items-center gap-1 rounded-lg pr-1.5 pl-10 bg-gradient-to-l from-slate-100/70 via-slate-100/70 to-transparent dark:from-slate-800/60 dark:via-slate-800/60">
-          <button class="ss-btn-primary !px-2 !py-1 !text-[11px]" :disabled="!state.tarOk || !!state.busy" @click="$emit('restore', entry)">
+          <button class="ss-btn-primary !px-2 !py-1 !text-[11px]" :disabled="!state.tarOk || !!state.busy || locked" @click="$emit('restore', entry)">
             <ArchiveRestore :size="12" />
             Восстановить
           </button>
@@ -45,7 +53,7 @@ defineEmits(['restore', 'log', 'reveal', 'del'])
           <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700" title="Показать в папке" @click="$emit('reveal', entry)">
             <Eye :size="14" />
           </button>
-          <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Удалить архив" @click="$emit('del', entry)">
+          <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Удалить архив" :disabled="locked" @click="$emit('del', entry)">
             <Trash2 :size="14" />
           </button>
         </div>
@@ -79,7 +87,7 @@ defineEmits(['restore', 'log', 'reveal', 'del'])
         </div>
         <div class="mt-1.5 flex items-center gap-1">
           <span class="text-[10px] text-slate-400 mr-auto">SU {{ entry.su_version }} · путей: {{ (entry.paths || []).length }}</span>
-          <button class="ss-btn-primary !px-2.5 !py-1 !text-xs" :disabled="!state.tarOk || !!state.busy" @click="$emit('restore', entry)">
+          <button class="ss-btn-primary !px-2.5 !py-1 !text-xs" :disabled="!state.tarOk || !!state.busy || locked" @click="$emit('restore', entry)">
             <ArchiveRestore :size="13" />
             Восстановить
           </button>
@@ -89,7 +97,7 @@ defineEmits(['restore', 'log', 'reveal', 'del'])
           <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800" title="Показать в папке" @click="$emit('reveal', entry)">
             <Eye :size="14" />
           </button>
-          <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Удалить архив" @click="$emit('del', entry)">
+          <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Удалить архив" :disabled="locked" @click="$emit('del', entry)">
             <Trash2 :size="14" />
           </button>
         </div>

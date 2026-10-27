@@ -39,12 +39,10 @@ const state = reactive({
   targets: [],   // [{key,label,scope,kind,name,path,exists,size,modified}]
   history: [],   // [{file,created_at,comment,kind,size,su_version,paths,labels}]
   historyByVersion: [], // [{year,current,store_exists,backups_path,count,history:[...store_year,available]}]
-  busy: null,    // 'create' | 'restore' | null — длительные операции
+  busy: null,    // 'create' | 'restore' | 'reset' | null — длительные операции
   progress: null, // {stage,label,current,total,percent} — прогресс создания копии
   toast: null,   // { kind: 'ok' | 'err', text }
-  restartBanner: false,
   pendingRestore: null,  // {created_at, archive, labels, from_current_session, result} | null
-  restoreRelaunch: true, // запускать SketchUp после отложенного применения
   showHelp: false,       // одноразовый флаг Ruby: открыть справку (пункт меню «Справка»)
   checkingUpdate: false  // индикатор кнопки проверки обновлений в шапке
 })
@@ -88,18 +86,13 @@ function emitResult(kind, payload) {
   }
   if (kind === 'restore_done') {
     state.busy = null
-    const n = (payload.restored || []).length
     const d = (payload.deferred || []).length
     const errs = payload.errors || []
-    const parts = []
-    if (n) parts.push(`Восстановлено сразу: путей ${n} (перезапустите SketchUp)`)
-    if (d) parts.push(`применится после закрытия SketchUp: путей ${d}, затем он запустится снова`)
-    if (n || d) {
-      state.restartBanner = n > 0
+    if (d) {
       if (errs.length) {
-        toast('err', `${parts.join('; ')}. С ошибками: ${errs.length}. ${errs[0]}`, 8000)
+        toast('err', `Запланировано: путей ${d}. С ошибками: ${errs.length}. ${errs[0]}`, 8000)
       } else {
-        toast('ok', parts.join('; '), 8000)
+        toast('ok', `Запланировано: путей ${d}. Закройте SketchUp — изменения применятся, затем откройте его вручную`, 8000)
       }
     } else if (errs.length) {
       toast('err', `Ошибка восстановления: ${errs[0]}`, 8000)
@@ -116,7 +109,7 @@ function emitResult(kind, payload) {
     const what = Array.isArray(payload.labels) && payload.labels.length
       ? payload.labels.join(', ')
       : (payload.label || '')
-    toast('ok', `Сброс подготовлен (${what}): SketchUp будет закрыт и запущен снова. Резервная копия: ${payload.backup_file || ''}`, 8000)
+    toast('ok', `Сброс подготовлен (${what}). Закройте SketchUp сами — изменения применятся, затем откройте его вручную. Резервная копия: ${payload.backup_file || ''}`, 8000)
   }
   if (kind === 'archive_dir_set') {
     state.busy = null
@@ -146,7 +139,6 @@ if (typeof window !== 'undefined') {
     state.history = payload.history || []
     state.historyByVersion = payload.history_by_version || []
     state.pendingRestore = payload.pending_restore || null
-    state.restoreRelaunch = payload.restore_relaunch !== false
     state.showHelp = !!payload.show_help
     state.busy = null
     state.progress = null
@@ -208,15 +200,15 @@ export function createBackup(comment, keys) {
 }
 
 /** Восстановление из архива хранилища. keys — null (все из архива) или массив.
- *  relaunch — запускать SketchUp после отложенного применения файлов настроек.
- *  storeYear — блок версии, из которого восстанавливают (чужое хранилище). */
-export function restoreBackup(file, autoBackup, keys = null, relaunch = true, storeYear = null) {
+ *  storeYear — блок версии, из которого восстанавливают (чужое хранилище).
+ *  Автоперезапуска нет: пользователь закрывает SketchUp сам. */
+export function restoreBackup(file, autoBackup, keys = null, storeYear = null) {
   if (isMock) {
-    applyMockAction('restore_backup', { file, auto_backup: autoBackup, relaunch })
+    applyMockAction('restore_backup', { file, auto_backup: autoBackup })
     return
   }
   state.busy = 'restore'
-  callRubyJson('restore_backup', { file, auto_backup: !!autoBackup, keys, relaunch: !!relaunch, store_year: storeYear || '' })
+  callRubyJson('restore_backup', { file, auto_backup: !!autoBackup, keys, store_year: storeYear || '' })
 }
 
 /** Отменяет отложенное применение файлов настроек (пока SketchUp открыт). */
@@ -304,15 +296,9 @@ export function resetArchiveDir() {
   callRuby('reset_archive_dir')
 }
 
-/** Запоминает выбор «запускать SketchUp после применения» для будущих восстановлений. */
-export function setRestoreRelaunch(value) {
-  if (isMock) { applyMockAction('set_restore_relaunch', { value: !!value }); return }
-  callRubyJson('set_restore_relaunch', { value: !!value })
-}
-
 /** Сброс целей к заводским настройкам (keys: ['private_prefs', 'plugins', …]).
- *  Ruby принудительно создаёт резервную копию, применение — сразу после
- *  закрытия SketchUp; SketchUp закрывается сам и запускается снова. */
+ *  Ruby принудительно создаёт резервную копию, применение — после закрытия
+ *  SketchUp пользователем вручную (кнопка «Закрыть SketchUp» в баннере). */
 export function resetTargets(keys) {
   const list = Array.isArray(keys) ? keys : [keys]
   if (isMock) {
@@ -321,6 +307,13 @@ export function resetTargets(keys) {
   }
   state.busy = 'reset'
   callRubyJson('reset_target', { keys: list })
+}
+
+/** Закрытие SketchUp по явной кнопке пользователя в баннере отложенной
+ *  задачи. Автозакрытия нет. Несохранённая модель — штатный диалог SketchUp. */
+export function quitSketchup() {
+  if (isMock) { toast('ok', 'SketchUp закрывается (mock)'); return }
+  callRuby('quit_sketchup')
 }
 
 export function revealBackup(file, storeYear = null) {

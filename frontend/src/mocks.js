@@ -13,8 +13,6 @@ const mockTargets = [
   { key: 'templates', label: 'Шаблоны (Templates)', scope: 'roaming', kind: 'dir', name: 'Templates', path: 'C:\\Users\\User\\AppData\\Roaming\\SketchUp\\SketchUp 2027\\SketchUp\\Templates', exists: true, size: 3_145_728 }
 ]
 
-let mockRelaunch = true
-
 let mockHistory = [
   { file: 'dn1sup_settings_2027-10-05_182233.zip', created_at: '2027-10-05 18:22:33', comment: 'Перед обновлением SketchUp', kind: 'manual', size: 18_241_331, su_version: '27.0.100', paths: ['private_prefs', 'materials', 'plugins'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)', 'Расширения (Plugins)'] },
   { file: 'dn1sup_settings_auto_2027-10-05_181002.zip', created_at: '2027-10-05 18:10:02', comment: 'Автоматически перед восстановлением', kind: 'auto', size: 17_998_112, su_version: '27.0.100', paths: ['private_prefs', 'materials'], labels: ['Настройки интерфейса (PrivatePreferences.json)', 'Материалы (Materials)'] },
@@ -83,8 +81,7 @@ export function mockPayload() {
     targets: mockTargets,
     history: mockHistory,
     history_by_version: byVersion,
-    pending_restore: null,
-    restore_relaunch: mockRelaunch
+    pending_restore: null
   }
 }
 
@@ -214,10 +211,6 @@ export function applyMockAction(name, params) {
     const base = mockPayload()
     window.pushResult('archive_dir_set', { archive_dir: base.backups_path })
     setTimeout(() => window.pushState({ ...base, archive_dir: '', archive_dir_custom: false }), 150)
-  }
-  if (name === 'set_restore_relaunch') {
-    mockRelaunch = !!params.value
-    setTimeout(() => window.pushState(mockPayload()), 150)
   }
   if (name === 'reset_target') {
     const keys = Array.isArray(params.keys) && params.keys.length ? params.keys : [params.key]

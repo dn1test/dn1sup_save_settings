@@ -59,7 +59,7 @@ module Dn1supSaveSettings
 
           cfg = JSON.parse(File.read(File.join(result.pending_dir, 'pending.json')))
           assert_equal roaming, cfg['roots']['roaming']
-          assert_equal true, cfg['relaunch'], 'relaunch по умолчанию включён'
+          assert_equal false, cfg['relaunch'], 'relaunch по умолчанию выключен — пользователь открывает SketchUp сам'
           kinds = cfg['targets'].each_with_object({}) { |t, h| h[t['name']] = t['kind'] }
           assert_equal 'dir', kinds['Materials'], 'kind каталога записан в pending.json'
           assert_equal 'file', kinds['PrivatePreferences.json'], 'kind файла записан в pending.json'

@@ -7,7 +7,7 @@ import {
 import {
   state, isMock, toast, loadState, createBackup, restoreBackup, deleteBackup,
   importZip, readArchiveInfo, readArchiveLog, openBackupsFolder, revealBackup, checkUpdate,
-  chooseArchiveDir, resetArchiveDir, setRestoreRelaunch,
+  chooseArchiveDir, resetArchiveDir, quitSketchup,
   cancelPendingRestore, dismissRestoreResult, resetTargets
 } from './composables/useSketchupBridge'
 import { useTheme } from './composables/useTheme'
@@ -51,7 +51,7 @@ function toggleKey(key) {
 }
 
 const selectedCount = computed(() => (selectedKeys.value || []).length)
-const canCreate = computed(() => state.tarOk && selectedCount.value > 0 && !state.busy)
+const canCreate = computed(() => state.tarOk && selectedCount.value > 0 && !state.busy && !pendingActive.value)
 const comment = ref('')
 
 // -- вид истории: «строки» (один архив — одна строка) или «карточки» ----------
@@ -151,6 +151,10 @@ const targetHints = {
 }
 
 async function openRestore(entry) {
+  if (isLocked.value) {
+    toast('err', 'Закройте SketchUp или отмените запланированную задачу — настройки заблокированы до перезагрузки')
+    return
+  }
   const info = await readArchiveInfo(entry.file, storeYearOf(entry))
   if (!info || !info.manifest) {
     toast('err', 'Не удалось прочитать состав архива')
@@ -167,8 +171,7 @@ async function openRestore(entry) {
     targets,
     native: info.native || [],
     selected: targets.map(t => t.key),
-    autoBackup: true,
-    relaunch: state.restoreRelaunch !== false
+    autoBackup: true
   }
 }
 
@@ -194,7 +197,7 @@ function doRestore() {
   restoreModal.value = null
   // Все выбраны — null (весь архив); подмножество — явный список ключей.
   const keys = m.selected.length === (m.targets || []).length ? null : [...m.selected]
-  restoreBackup(m.file, m.autoBackup, keys, m.relaunch, m.store_year)
+  restoreBackup(m.file, m.autoBackup, keys, m.store_year)
 }
 
 const hasPlugins = computed(() => (restoreModal.value?.targets || []).some(t => t.key === 'plugins'))
@@ -213,6 +216,11 @@ const pendingStale = computed(() => {
   const p = state.pendingRestore
   return !!p && !p.from_current_session && !p.result
 })
+
+// Жёсткая блокировка до перезагрузки: пока отложенная задача активна,
+// все изменения запрещены — только «Закрыть SketchUp», «Отменить»,
+// просмотр и закрытие диалога.
+const isLocked = computed(() => pendingActive.value)
 
 const pendingKindText = computed(() =>
   state.pendingRestore?.kind === 'reset' ? 'Сброс настроек' : 'Отложенное применение настроек'
@@ -233,6 +241,10 @@ function cancelPending() {
   cancelPendingRestore()
 }
 
+function quitSu() {
+  quitSketchup()
+}
+
 function dismissResult() {
   dismissRestoreResult()
 }
@@ -240,6 +252,10 @@ function dismissResult() {
 const confirmDelete = ref(null) // {file, store_year} — архив к удалению
 
 function askDelete(entry) {
+  if (isLocked.value) {
+    toast('err', 'Закройте SketchUp или отмените запланированную задачу — настройки заблокированы до перезагрузки')
+    return
+  }
   confirmDelete.value = { file: entry.file, store_year: storeYearOf(entry) }
 }
 
@@ -283,6 +299,10 @@ const resetTitle = computed(() => {
 })
 
 function openReset(keys) {
+  if (isLocked.value) {
+    toast('err', 'Сброс уже запланирован — дождитесь перезапуска SketchUp или отмените его в баннере')
+    return
+  }
   resetModal.value = { keys: Array.isArray(keys) ? keys : [keys] }
 }
 
@@ -356,18 +376,6 @@ onMounted(loadState)
       </div>
     </header>
 
-    <!-- Баннер: перезапуск после восстановления -->
-    <div
-      v-if="state.restartBanner"
-      class="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs"
-    >
-      <TriangleAlert :size="14" class="shrink-0" />
-      <span class="flex-1">Настройки восстановлены. Перезапустите SketchUp, чтобы изменения вступили в силу полностью.</span>
-      <button class="p-0.5 rounded hover:bg-amber-100 dark:hover:bg-amber-900" @click="state.restartBanner = false">
-        <X :size="14" />
-      </button>
-    </div>
-
     <!-- Баннер: активное отложенное восстановление (применится после закрытия) -->
     <div
       v-if="pendingActive"
@@ -376,13 +384,14 @@ onMounted(loadState)
       <Clock3 :size="14" class="shrink-0" />
       <span v-if="state.pendingRestore.kind === 'reset'" class="flex-1">
         Сброс ({{ (state.pendingRestore.labels || []).join(', ') }})
-        применится автоматически сразу после закрытия SketchUp.
+        запланирован: закройте SketchUp сами — изменения применятся, затем откройте его вручную.
       </span>
       <span v-else class="flex-1">
         Восстановление из архива <span class="font-mono">{{ state.pendingRestore.archive }}</span>
         ({{ (state.pendingRestore.labels || []).join(', ') }})
-        применятся автоматически сразу после закрытия SketchUp, затем он запустится снова.
+        запланировано: закройте SketchUp сами — изменения применятся, затем откройте его вручную.
       </span>
+      <button class="ss-btn-primary !px-2 !py-1 !text-[10px] shrink-0" @click="quitSu">Закрыть SketchUp</button>
       <button class="ss-btn-ghost !px-2 !py-1 !text-[10px] shrink-0" @click="cancelPending">Отменить</button>
     </div>
 
@@ -555,7 +564,7 @@ onMounted(loadState)
       <button
         class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
         :disabled="resetBlocked || !resetTargetsState.private_prefs"
-        title="Вернуть вид SketchUp к заводскому: PrivatePreferences.json будет удалён сразу после закрытия SketchUp (перед этим — принудительная резервная копия). SketchUp закроется и запустится снова автоматически"
+        title="Вернуть вид SketchUp к заводскому: PrivatePreferences.json будет удалён после того как вы сами закроете SketchUp (перед этим — принудительная резервная копия). Затем откройте SketchUp вручную"
         @click="openReset('private_prefs')"
       >
         <RotateCw :size="12" />
@@ -564,7 +573,7 @@ onMounted(loadState)
       <button
         class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
         :disabled="resetBlocked || !resetTargetsState.plugins"
-        title="Удалить все установленные расширения, кроме самого Save Settings: папка Plugins будет очищена сразу после закрытия SketchUp (перед этим — принудительная резервная копия). SketchUp закроется и запустится снова автоматически"
+        title="Удалить все установленные расширения, кроме самого Save Settings: папка Plugins будет очищена после того как вы сами закроете SketchUp (перед этим — принудительная резервная копия). Затем откройте SketchUp вручную"
         @click="openReset('plugins')"
       >
         <PackageX :size="12" />
@@ -573,14 +582,14 @@ onMounted(loadState)
       <button
         class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap"
         :disabled="resetBlocked || !resetTargetsState.private_prefs || !resetTargetsState.plugins"
-        title="Сбросить и интерфейс, и плагины: PrivatePreferences.json будет удалён, папка Plugins очищена (кроме самого Save Settings). SketchUp закроется и запустится снова автоматически"
+        title="Сбросить и интерфейс, и плагины: PrivatePreferences.json будет удалён, папка Plugins очищена (кроме самого Save Settings) после того как вы сами закроете SketchUp. Затем откройте SketchUp вручную"
         @click="openReset(['private_prefs', 'plugins'])"
       >
         <Eraser :size="12" />
         Сбросить всё
       </button>
       <div class="ml-auto flex items-center gap-1 shrink-0">
-        <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap" :disabled="!state.tarOk" title="Импортировать zip-архив с диска" @click="importZip">
+        <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap" :disabled="!state.tarOk || !!state.busy || isLocked" title="Импортировать zip-архив с диска" @click="importZip">
           <Upload :size="13" />
           Импорт zip
         </button>
@@ -614,7 +623,7 @@ onMounted(loadState)
           <span class="flex-1">
             Папка по умолчанию лежит в профиле SketchUp: при удалении SketchUp архивы удалятся вместе с ней.
           </span>
-          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
+          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" :disabled="isLocked" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
             Выбрать…
           </button>
         </div>
@@ -629,7 +638,7 @@ onMounted(loadState)
               type="checkbox"
               class="accent-brand-500 w-3.5 h-3.5 shrink-0"
               :checked="(selectedKeys || []).includes(t.key)"
-              :disabled="!t.exists"
+              :disabled="!t.exists || isLocked"
               @change="toggleKey(t.key)"
             >
             <span class="min-w-0 flex-1">
@@ -704,32 +713,16 @@ onMounted(loadState)
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            <button v-if="state.archiveDirCustom" class="ss-btn-ghost" @click="resetArchiveDir">
+            <button v-if="state.archiveDirCustom" class="ss-btn-ghost" :disabled="isLocked" @click="resetArchiveDir">
               <RotateCw :size="13" />
               Сбросить
             </button>
-            <button class="ss-btn-primary" @click="chooseArchiveDir">
+            <button class="ss-btn-primary" :disabled="isLocked" @click="chooseArchiveDir">
               <FolderOpen :size="14" />
               Выбрать папку…
             </button>
             <button class="ss-btn-ghost" @click="dirModal = true">Подробнее</button>
           </div>
-        </div>
-
-        <div class="space-y-2">
-          <h4 class="text-xs font-semibold text-slate-800 dark:text-slate-100">Восстановление</h4>
-          <label class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
-            <input
-              type="checkbox"
-              class="accent-brand-500 w-3.5 h-3.5 mt-0.5 shrink-0"
-              :checked="state.restoreRelaunch !== false"
-              @change="setRestoreRelaunch($event.target.checked)"
-            >
-            <span class="text-xs leading-snug">
-              Запускать SketchUp после применения
-              <span class="block text-[10px] text-slate-400">Применяется к будущим восстановлениям (в окне подтверждения можно поменять разово)</span>
-            </span>
-          </label>
         </div>
 
         <div class="space-y-1.5">
@@ -825,7 +818,7 @@ onMounted(loadState)
           class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-snug"
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
-          <span>В архив включены расширения (Plugins): в копию попадает и сам плагин. Применение — после закрытия SketchUp, затем он запустится снова.</span>
+          <span>В архив включены расширения (Plugins): в копию попадает и сам плагин. Применение — после того как вы сами закроете SketchUp, затем откройте его вручную.</span>
         </div>
 
         <div
@@ -833,19 +826,12 @@ onMounted(loadState)
         >
           <Clock3 :size="13" class="shrink-0 mt-0.5" />
           <span>
-            Восстановление применяется автоматически сразу после закрытия SketchUp —
+            Восстановление применяется после того как вы сами закроете SketchUp —
             и файлы настроек, и папки: в работающем SketchUp настройки перезаписываются
-            при выходе, а файлы расширений заняты. После применения SketchUp запустится снова.
+            при выходе, а файлы расширений заняты. После применения откройте SketchUp вручную.
+            До перезагрузки настройки заблокированы.
           </span>
         </div>
-
-        <label class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
-          <input v-model="restoreModal.relaunch" type="checkbox" class="accent-brand-500 w-3.5 h-3.5 mt-0.5 shrink-0">
-          <span class="text-xs leading-snug">
-            Запустить SketchUp после применения
-            <span class="block text-[10px] text-slate-400">Иначе откройте SketchUp вручную</span>
-          </span>
-        </label>
 
         <div
           v-if="hasDirs"
@@ -859,7 +845,7 @@ onMounted(loadState)
       </div>
       <template #footer>
         <button class="ss-btn-ghost" @click="restoreModal = null">Отмена</button>
-        <button class="ss-btn-primary" :disabled="!!state.busy || !restoreSelectedCount" @click="doRestore">
+        <button class="ss-btn-primary" :disabled="!!state.busy || !restoreSelectedCount || isLocked" @click="doRestore">
           <ArchiveRestore :size="14" />
           {{ restoreIsPartial ? `Восстановить выбранное (${restoreSelectedCount})` : 'Восстановить' }}
         </button>
@@ -940,7 +926,8 @@ onMounted(loadState)
           <Clock3 :size="13" class="shrink-0 mt-0.5" />
           <span>
             Перед сбросом будет <span class="font-semibold">принудительно</span> создана резервная копия
-            текущего состояния. Изменения применятся автоматически сразу после закрытия SketchUp.
+            текущего состояния. Изменения применятся после того как вы сами закроете SketchUp
+            (кнопка «Закрыть SketchUp» в баннере). До перезагрузки настройки заблокированы.
           </span>
         </div>
 
@@ -961,8 +948,9 @@ onMounted(loadState)
         >
           <TriangleAlert :size="13" class="shrink-0 mt-0.5" />
           <span>
-            После подтверждения <span class="font-semibold">SketchUp будет закрыт и запущен снова</span>
-            автоматически. Если модель не сохранена — SketchUp предложит сохранить изменения.
+            После подтверждения закройте SketchUp сами кнопкой «Закрыть SketchUp» в баннере —
+            изменения применятся, затем откройте его вручную.
+            Если модель не сохранена — SketchUp предложит сохранить изменения.
           </span>
         </div>
       </div>
@@ -1020,12 +1008,12 @@ onMounted(loadState)
         </div>
       </div>
       <template #footer>
-        <button v-if="state.archiveDirCustom" class="ss-btn-ghost" @click="resetArchiveDir">
+        <button v-if="state.archiveDirCustom" class="ss-btn-ghost" :disabled="isLocked" @click="resetArchiveDir">
           <RotateCw :size="13" />
           Сбросить
         </button>
         <button class="ss-btn-ghost" @click="dirModal = false">Закрыть</button>
-        <button class="ss-btn-primary" @click="chooseArchiveDir">
+        <button class="ss-btn-primary" :disabled="isLocked" @click="chooseArchiveDir">
           <FolderOpen :size="14" />
           Выбрать папку…
         </button>
