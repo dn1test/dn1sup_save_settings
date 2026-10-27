@@ -25,6 +25,7 @@ const { isDark, toggleTheme } = useTheme()
 
 const helpOpen = ref(false)
 const extSettingsOpen = ref(false)
+const settingsOpen = ref(false)
 watch(() => state.showHelp, (v) => {
   if (v) {
     helpOpen.value = true
@@ -135,23 +136,6 @@ const activeGroup = computed(() =>
 
 const activeHistory = computed(() => activeGroup.value?.history || [])
 const activeTargets = computed(() => activeGroup.value?.targets || [])
-
-const subTab = ref('settings')
-try {
-  const saved = localStorage.getItem('dn1sup_sub_tab')
-  if (saved === 'history' || saved === 'settings') subTab.value = saved
-} catch {
-  // ignore
-}
-
-function selectSubTab(tab) {
-  subTab.value = tab
-  try {
-    localStorage.setItem('dn1sup_sub_tab', tab)
-  } catch {
-    // ignore
-  }
-}
 
 // Подсказки совместимости путей при переносе между версиями SketchUp:
 // JSON-настройки лежат одной схемой (лишние ключи игнорируются), файлы
@@ -487,160 +471,37 @@ onMounted(loadState)
       <span class="ml-auto text-[10px] text-slate-400 shrink-0 self-center">всего копий: {{ totalHistoryCount }}</span>
     </div>
 
-    <!-- Подвкладки версии: настройки и история -->
-    <div class="flex items-center gap-1 px-3 pt-1.5">
-      <div class="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
-        <button
-          class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
-          :class="subTab === 'settings'
-            ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
-          @click="selectSubTab('settings')"
-        >
-          Настройки
-        </button>
-        <button
-          class="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors"
-          :class="subTab === 'history'
-            ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
-          @click="selectSubTab('history')"
-        >
-          История сохранений
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-300">{{ activeHistory.length }}</span>
-        </button>
-      </div>
-      <div v-if="subTab === 'history'" class="ml-auto flex items-center gap-0.5">
-        <button
-          class="p-1.5 rounded-lg"
-          :class="historyView === 'rows'
-            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
-          title="Вид: строки — один архив в строке, действия при наведении"
-          @click="setHistoryView('rows')"
-        >
-          <List :size="14" />
-        </button>
-        <button
-          class="p-1.5 rounded-lg"
-          :class="historyView === 'cards'
-            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
-          title="Вид: карточки — дата, тип, комментарий и кнопки на каждой"
-          @click="setHistoryView('cards')"
-        >
-          <LayoutGrid :size="14" />
-        </button>
-      </div>
-    </div>
-
-    <!-- Основная область: вкладка версии -->
-    <main v-if="subTab === 'settings'" class="flex-1 min-h-0 overflow-y-auto p-3">
-      <!-- Настройки версии: у текущей — сохранение, у остальных — пути на чтение -->
+    <!-- Основная область: история активной версии -->
+    <main class="flex-1 min-h-0 overflow-y-auto p-3">
       <section class="ss-card flex flex-col min-h-0 overflow-hidden">
-        <template v-if="activeGroup?.current">
-        <div class="px-3.5 pt-3 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-          <h2 class="text-xs font-semibold uppercase tracking-wide">Сохранение параметров</h2>
-          <div class="mt-0.5 flex items-center gap-1">
-            <p class="min-w-0 flex-1 text-[10px] text-slate-400 truncate" :title="state.backupsPath">Хранилище: {{ state.backupsPath }}</p>
+        <div class="flex items-center gap-1 px-3.5 pt-3 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <h2 class="text-xs font-semibold uppercase tracking-wide">История сохранений</h2>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ activeHistory.length }}</span>
+          <div class="ml-auto flex items-center gap-0.5">
             <button
-              class="p-1 rounded shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title="Папка архивов — куда сохранять и где читать"
-              @click="dirModal = true"
+              class="p-1.5 rounded-lg"
+              :class="historyView === 'rows'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
+              title="Вид: строки — один архив в строке, действия при наведении"
+              @click="setHistoryView('rows')"
             >
-              <Pen :size="12" />
+              <List :size="14" />
+            </button>
+            <button
+              class="p-1.5 rounded-lg"
+              :class="historyView === 'cards'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
+              title="Вид: карточки — дата, тип, комментарий и кнопки на каждой"
+              @click="setHistoryView('cards')"
+            >
+              <LayoutGrid :size="14" />
+            </button>
+            <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap ml-1" @click="settingsOpen = true">
+              Настройки
             </button>
           </div>
-        </div>
-        <div
-          v-if="!state.archiveDirCustom"
-          class="flex items-start gap-2 mx-2 mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[10px] leading-snug"
-        >
-          <TriangleAlert :size="12" class="shrink-0 mt-0.5" />
-          <span class="flex-1">
-            Папка по умолчанию лежит в профиле SketchUp: при удалении SketchUp архивы удалятся вместе с ней.
-          </span>
-          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
-            Выбрать…
-          </button>
-        </div>
-        <div class="flex-1 overflow-y-auto px-2 py-2">
-          <label
-            v-for="t in state.targets"
-            :key="t.key"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60"
-            :class="{ 'opacity-45': !t.exists }"
-          >
-            <input
-              type="checkbox"
-              class="accent-brand-500 w-3.5 h-3.5 shrink-0"
-              :checked="(selectedKeys || []).includes(t.key)"
-              :disabled="!t.exists"
-              @change="toggleKey(t.key)"
-            >
-            <span class="min-w-0 flex-1">
-              <span class="block text-xs font-medium leading-tight truncate">{{ t.label }}</span>
-              <span class="block text-[10px] text-slate-400 truncate" :title="t.path">{{ t.path }}</span>
-              <span
-                v-if="t.kind === 'file' && t.modified"
-                class="block text-[10px] text-slate-400"
-                title="На диске — состояние последней записи SketchUp: изменения текущей сессии могли ещё не попасть в файл"
-              >
-                на диске изменён {{ formatDate(t.modified) }}
-              </span>
-            </span>
-            <span class="text-[10px] text-slate-400 shrink-0 tabular-nums">{{ t.exists ? formatBytes(t.size) : 'нет' }}</span>
-          </label>
-        </div>
-        <div class="p-3 border-t border-slate-100 dark:border-slate-800">
-          <p class="text-[10px] text-slate-400 leading-snug">
-            Отметьте, что сохранять. Комментарий и кнопка «Создать резервную копию» —
-            во вкладке «История» сверху списка.
-          </p>
-        </div>
-        </template>
-        <template v-else-if="activeGroup">
-          <div class="px-3.5 pt-3 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-            <h2 class="text-xs font-semibold uppercase tracking-wide">Настройки SketchUp {{ activeGroup.year }}</h2>
-            <p class="mt-0.5 text-[10px] text-slate-400 truncate" :title="activeGroup.backups_path">Хранилище: {{ activeGroup.backups_path }}</p>
-          </div>
-          <div class="flex-1 overflow-y-auto px-2 py-2">
-            <div
-              v-for="t in activeTargets"
-              :key="t.key"
-              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg"
-              :class="{ 'opacity-45': !t.exists }"
-              :title="targetHints[t.key] || t.path"
-            >
-              <span class="min-w-0 flex-1">
-                <span class="block text-xs font-medium leading-tight truncate">{{ t.label }}</span>
-                <span class="block text-[10px] text-slate-400 truncate" :title="t.path">{{ t.path }}</span>
-                <span
-                  v-if="t.kind === 'file' && t.modified"
-                  class="block text-[10px] text-slate-400"
-                >
-                  на диске изменён {{ formatDate(t.modified) }}
-                </span>
-              </span>
-              <span class="text-[10px] text-slate-400 shrink-0 tabular-nums">{{ t.exists ? formatBytes(t.size) : 'нет' }}</span>
-            </div>
-          </div>
-          <div class="p-3 border-t border-slate-100 dark:border-slate-800">
-            <p class="text-[10px] text-slate-400 leading-snug">
-              Только чтение: новые копии создаются из запущенной версии (сейчас SketchUp {{ state.suYear }}).
-              Копии этой версии можно перенести в текущую кнопкой «Восстановить».
-            </p>
-          </div>
-        </template>
-      </section>
-    </main>
-
-    <!-- Подвкладка «История»: история активной версии -->
-    <main v-else class="flex-1 min-h-0 overflow-y-auto p-3">
-      <section class="ss-card flex flex-col min-h-0 overflow-hidden">
-        <div class="flex items-center px-3.5 pt-3 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-          <h2 class="text-xs font-semibold uppercase tracking-wide">История сохранений</h2>
-          <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{{ activeHistory.length }}</span>
         </div>
         <div v-if="activeGroup?.current" class="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-2">
           <div class="flex items-center gap-2">
@@ -658,7 +519,7 @@ onMounted(loadState)
             </button>
           </div>
           <p class="text-[10px] text-slate-400 leading-snug">
-            Сохраняет отмеченные во вкладке «Настройки» пути ({{ selectedCount }}) в zip-архив.
+            Сохраняет отмеченные в «Настройки» пути ({{ selectedCount }}) в zip-архив.
             Копия попадёт в историю текущей версии.
           </p>
         </div>
@@ -731,6 +592,96 @@ onMounted(loadState)
 
     <!-- Модал справки -->
     <HelpModal :open="helpOpen" @close="helpOpen = false" />
+
+    <!-- Модал настроек версии: выбор путей для копии -->
+    <Modal :open="settingsOpen" :title="activeGroup?.current ? 'Настройки' : `Настройки SketchUp ${activeGroup?.year || ''}`" max-width="max-w-lg" body-class="max-h-[70vh]" @close="settingsOpen = false">
+      <div v-if="activeGroup?.current" class="space-y-2">
+        <div class="flex items-center gap-1">
+          <p class="min-w-0 flex-1 text-[10px] text-slate-400 truncate" :title="state.backupsPath">Хранилище: {{ state.backupsPath }}</p>
+          <button
+            class="p-1 rounded shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Папка архивов — куда сохранять и где читать"
+            @click="dirModal = true"
+          >
+            <Pen :size="12" />
+          </button>
+        </div>
+        <div
+          v-if="!state.archiveDirCustom"
+          class="flex items-start gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[10px] leading-snug"
+        >
+          <TriangleAlert :size="12" class="shrink-0 mt-0.5" />
+          <span class="flex-1">
+            Папка по умолчанию лежит в профиле SketchUp: при удалении SketchUp архивы удалятся вместе с ней.
+          </span>
+          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
+            Выбрать…
+          </button>
+        </div>
+        <div class="px-1 py-1">
+          <label
+            v-for="t in state.targets"
+            :key="t.key"
+            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60"
+            :class="{ 'opacity-45': !t.exists }"
+          >
+            <input
+              type="checkbox"
+              class="accent-brand-500 w-3.5 h-3.5 shrink-0"
+              :checked="(selectedKeys || []).includes(t.key)"
+              :disabled="!t.exists"
+              @change="toggleKey(t.key)"
+            >
+            <span class="min-w-0 flex-1">
+              <span class="block text-xs font-medium leading-tight truncate">{{ t.label }}</span>
+              <span class="block text-[10px] text-slate-400 truncate" :title="t.path">{{ t.path }}</span>
+              <span
+                v-if="t.kind === 'file' && t.modified"
+                class="block text-[10px] text-slate-400"
+                title="На диске — состояние последней записи SketchUp: изменения текущей сессии могли ещё не попасть в файл"
+              >
+                на диске изменён {{ formatDate(t.modified) }}
+              </span>
+            </span>
+            <span class="text-[10px] text-slate-400 shrink-0 tabular-nums">{{ t.exists ? formatBytes(t.size) : 'нет' }}</span>
+          </label>
+        </div>
+        <p class="text-[10px] text-slate-400 leading-snug">
+          Отметьте, что сохранять. Выбрано: {{ selectedCount }}.
+        </p>
+      </div>
+      <div v-else-if="activeGroup" class="space-y-2">
+        <p class="text-[10px] text-slate-400 truncate" :title="activeGroup.backups_path">Хранилище: {{ activeGroup.backups_path }}</p>
+        <div class="px-1 py-1">
+          <div
+            v-for="t in activeTargets"
+            :key="t.key"
+            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg"
+            :class="{ 'opacity-45': !t.exists }"
+            :title="targetHints[t.key] || t.path"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block text-xs font-medium leading-tight truncate">{{ t.label }}</span>
+              <span class="block text-[10px] text-slate-400 truncate" :title="t.path">{{ t.path }}</span>
+              <span
+                v-if="t.kind === 'file' && t.modified"
+                class="block text-[10px] text-slate-400"
+              >
+                на диске изменён {{ formatDate(t.modified) }}
+              </span>
+            </span>
+            <span class="text-[10px] text-slate-400 shrink-0 tabular-nums">{{ t.exists ? formatBytes(t.size) : 'нет' }}</span>
+          </div>
+        </div>
+        <p class="text-[10px] text-slate-400 leading-snug">
+          Только чтение: новые копии создаются из запущенной версии (сейчас SketchUp {{ state.suYear }}).
+          Копии этой версии можно перенести в текущую кнопкой «Восстановить».
+        </p>
+      </div>
+      <template #footer>
+        <button class="ss-btn-primary" @click="settingsOpen = false">Готово</button>
+      </template>
+    </Modal>
 
     <!-- Модал настроек расширения -->
     <Modal :open="extSettingsOpen" title="Настройки расширения" max-width="max-w-lg" @close="extSettingsOpen = false">
