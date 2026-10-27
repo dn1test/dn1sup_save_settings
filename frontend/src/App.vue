@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   Archive, ArchiveRestore, CheckCircle2, CircleHelp, Clock3, Eraser, FolderOpen,
-  LayoutGrid, List, Loader2, Moon, PackageX, Pen, RotateCw, Save, Settings as SettingsIcon, Sun, Trash2, TriangleAlert, Upload, X
+  LayoutGrid, List, ListChecks, Loader2, Moon, PackageX, RotateCw, Save, Settings as SettingsIcon, Sun, Trash2, TriangleAlert, Upload, X
 } from 'lucide-vue-next'
 import {
   state, isMock, toast, loadState, createBackup, restoreBackup, deleteBackup,
@@ -135,7 +135,6 @@ const activeGroup = computed(() =>
 )
 
 const activeHistory = computed(() => activeGroup.value?.history || [])
-const activeTargets = computed(() => activeGroup.value?.targets || [])
 
 // Подсказки совместимости путей при переносе между версиями SketchUp:
 // JSON-настройки лежат одной схемой (лишние ключи игнорируются), файлы
@@ -363,7 +362,7 @@ onMounted(loadState)
         >
           <RotateCw :size="15" :class="{ 'animate-spin': state.checkingUpdate }" />
         </button>
-        <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Настройки расширения: папка архивов, автозапуск, сведения" @click="extSettingsOpen = true">
+        <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Настройки расширения: папка архивов, сведения" @click="extSettingsOpen = true">
           <SettingsIcon :size="16" />
         </button>
         <button class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Справка: как пользоваться" @click="helpOpen = true">
@@ -507,8 +506,9 @@ onMounted(loadState)
             >
               <LayoutGrid :size="14" />
             </button>
-            <button class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap ml-1" @click="settingsOpen = true">
-              Настройки
+            <button v-if="activeGroup?.current" class="ss-btn-ghost !px-2.5 !py-1 !text-[11px] whitespace-nowrap ml-1" title="Какие пути включать в резервную копию" @click="settingsOpen = true">
+              <ListChecks :size="13" />
+              Что сохранять
             </button>
           </div>
         </div>
@@ -528,7 +528,7 @@ onMounted(loadState)
             </button>
           </div>
           <p class="text-[10px] text-slate-400 leading-snug">
-            Сохраняет отмеченные в «Настройки» пути ({{ selectedCount }}) в zip-архив.
+            Сохраняет отмеченные в «Что сохранять» пути ({{ selectedCount }}) в zip-архив.
             Копия попадёт в историю текущей версии.
           </p>
         </div>
@@ -602,31 +602,9 @@ onMounted(loadState)
     <!-- Модал справки -->
     <HelpModal :open="helpOpen" @close="helpOpen = false" />
 
-    <!-- Модал настроек версии: выбор путей для копии -->
-    <Modal :open="settingsOpen" :title="activeGroup?.current ? 'Настройки' : `Настройки SketchUp ${activeGroup?.year || ''}`" max-width="max-w-lg" body-class="max-h-[70vh]" @close="settingsOpen = false">
-      <div v-if="activeGroup?.current" class="space-y-2">
-        <div class="flex items-center gap-1">
-          <p class="min-w-0 flex-1 text-[10px] text-slate-400 truncate" :title="state.backupsPath">Хранилище: {{ state.backupsPath }}</p>
-          <button
-            class="p-1 rounded shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-            title="Папка архивов — куда сохранять и где читать"
-            @click="dirModal = true"
-          >
-            <Pen :size="12" />
-          </button>
-        </div>
-        <div
-          v-if="!state.archiveDirCustom"
-          class="flex items-start gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[10px] leading-snug"
-        >
-          <TriangleAlert :size="12" class="shrink-0 mt-0.5" />
-          <span class="flex-1">
-            Папка по умолчанию лежит в профиле SketchUp: при удалении SketchUp архивы удалятся вместе с ней.
-          </span>
-          <button class="ss-btn-ghost !px-1.5 !py-0.5 !text-[10px] shrink-0" :disabled="isLocked" title="Выбрать папку вне каталогов SketchUp" @click="chooseArchiveDir">
-            Выбрать…
-          </button>
-        </div>
+    <!-- Модал состава копии: выбор путей для копии текущей версии -->
+    <Modal :open="settingsOpen" title="Что сохранять" max-width="max-w-lg" body-class="max-h-[70vh]" @close="settingsOpen = false">
+      <div class="space-y-2">
         <div class="px-1 py-1">
           <label
             v-for="t in state.targets"
@@ -657,34 +635,6 @@ onMounted(loadState)
         </div>
         <p class="text-[10px] text-slate-400 leading-snug">
           Отметьте, что сохранять. Выбрано: {{ selectedCount }}.
-        </p>
-      </div>
-      <div v-else-if="activeGroup" class="space-y-2">
-        <p class="text-[10px] text-slate-400 truncate" :title="activeGroup.backups_path">Хранилище: {{ activeGroup.backups_path }}</p>
-        <div class="px-1 py-1">
-          <div
-            v-for="t in activeTargets"
-            :key="t.key"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg"
-            :class="{ 'opacity-45': !t.exists }"
-            :title="targetHints[t.key] || t.path"
-          >
-            <span class="min-w-0 flex-1">
-              <span class="block text-xs font-medium leading-tight truncate">{{ t.label }}</span>
-              <span class="block text-[10px] text-slate-400 truncate" :title="t.path">{{ t.path }}</span>
-              <span
-                v-if="t.kind === 'file' && t.modified"
-                class="block text-[10px] text-slate-400"
-              >
-                на диске изменён {{ formatDate(t.modified) }}
-              </span>
-            </span>
-            <span class="text-[10px] text-slate-400 shrink-0 tabular-nums">{{ t.exists ? formatBytes(t.size) : 'нет' }}</span>
-          </div>
-        </div>
-        <p class="text-[10px] text-slate-400 leading-snug">
-          Только чтение: новые копии создаются из запущенной версии (сейчас SketchUp {{ state.suYear }}).
-          Копии этой версии можно перенести в текущую кнопкой «Восстановить».
         </p>
       </div>
       <template #footer>
