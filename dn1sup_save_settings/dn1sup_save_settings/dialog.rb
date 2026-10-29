@@ -281,7 +281,7 @@ module Dn1supSaveSettings
     end
 
     # param: {file: 'dn1sup_settings_….zip', auto_backup: true,
-    #         keys: [...]|null, store_year: '2024'|null} —
+    #         keys: [...]|null, store_year: '2023'|null} —
     #         подтверждение происходит в интерфейсе. store_year — блок версии,
     #         из которого восстанавливают (архив ищется и в чужом хранилище).
     #         Восстановление целиком отложенное — и файлы настроек, и
@@ -601,7 +601,7 @@ module Dn1supSaveSettings
       return found['kind'].to_s if found
 
       if defined?(Dn1supSaveSettings::VersionStores)
-        VersionStores::SUPPORTED_YEARS.each do |year|
+        VersionStores.years.each do |year|
           arr = VersionStores.read_history_for_year(year)
           hit = arr.find { |e| e['file'] == name }
           return hit['kind'].to_s if hit

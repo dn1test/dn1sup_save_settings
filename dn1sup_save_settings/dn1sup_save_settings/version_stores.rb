@@ -4,9 +4,9 @@
 #
 # Хранилище расширения привязано к году (%APPDATA%/SketchUp/SketchUp <год>/
 # dn1sup_save_settings), поэтому запущенный SketchUp 2026 не видит копии,
-# созданные в 2024/2025. Модуль собирает историю по всем поддерживаемым
-# годам (SUPPORTED_YEARS) в блоки для интерфейса и ищет архивы для
-# восстановления/удаления вне текущего хранилища.
+# созданные в 2023/2024. Модуль собирает историю по всем обнаруженным годам
+# (.years: текущий SketchUp + профили на диске + годы из кастомной папки)
+# в блоки для интерфейса и ищет архивы для восстановления/удаления.
 #
 # Источники записей года:
 #   1) history.json чужого хранилища (отсортирован — новые первыми);
@@ -29,8 +29,45 @@ module Dn1supSaveSettings
   module VersionStores
     extend self
 
+    # Исторический фиксированный список (до динамических годов). Оставлен для
+    # совместимости тестов/внешних ссылок — новые годы не добавлять сюда,
+    # используйте .years.
     SUPPORTED_YEARS = %w[2024 2025 2026 2027].freeze
     ARCHIVE_PREFIX = 'dn1sup_settings_'
+    YEAR_PATTERN = /\A20\d\d\z/.freeze
+
+    # -- динамические годы -----------------------------------------------------
+    # Источник истины — реальная среда, а не захардкоженный список:
+    # текущий год из живого SketchUp (Paths.su_year) + годы установленных
+    # профилей SketchUp на диске (%APPDATA%/SketchUp/SketchUp 20xx и
+    # %LOCALAPPDATA%/SketchUp/SketchUp 20xx). Пустые годы (ни одного из 7
+    # путей, ни хранилища, ни истории) из list отфильтровываются — см. ниже.
+    def years
+      found = scan_installed_years
+      cur = Paths.su_year.to_s
+      found << cur if cur =~ YEAR_PATTERN
+      found.uniq.sort
+    end
+
+    # Годы установленных профилей SketchUp по наличию папок
+    # «…/SketchUp/SketchUp 20xx» в Roaming и Local. Только имена папок —
+    # существование 7 целей проверяется отдельно в targets_for_year/list.
+    def scan_installed_years
+      found = []
+      [appdata_base, local_base].each do |base|
+        parent = File.join(base, 'SketchUp')
+        next unless File.directory?(parent)
+
+        begin
+          Dir.children(parent).each do |name|
+            found << Regexp.last_match(1) if name =~ /\ASketchUp\s+(20\d\d)\s*\z/
+          end
+        rescue StandardError
+          nil
+        end
+      end
+      found.uniq.sort
+    end
 
     # -- пути ------------------------------------------------------------------
 
@@ -100,7 +137,16 @@ module Dn1supSaveSettings
       custom_by_file = {}
       custom_entries.each { |e| custom_by_file[e['file']] = e }
 
-      SUPPORTED_YEARS.map do |year|
+      # Кандидаты: установленные профили + текущий SketchUp + годы из
+      # манифестов кастомной папки (архив с другой машины, профиль снесён).
+      all_years = years
+      custom_entries.each do |entry|
+        y = entry_year(entry)
+        all_years << y if y =~ YEAR_PATTERN && !all_years.include?(y)
+      end
+      all_years = all_years.uniq.sort
+
+      blocks = all_years.map do |year|
         entries = read_history_for_year(year)
         by_file = {}
         entries.each { |e| by_file[e['file']] = e }
@@ -122,16 +168,26 @@ module Dn1supSaveSettings
         end
 
         entries = entries.sort_by { |e| e['created_at'].to_s }.reverse
+        targets = targets_for_year(year)
+        has_targets = targets.any? { |t| t['exists'] }
+        store_exists = File.directory?(dir_for_year(year))
         {
           'year' => year,
           'current' => year == current_year,
-          'store_exists' => File.directory?(dir_for_year(year)),
+          'store_exists' => store_exists,
           'backups_path' => backups_dir_for_year(year),
           'count' => entries.size,
           'history' => entries,
-          'targets' => targets_for_year(year)
+          'targets' => targets,
+          # Проверка «настройки на месте»: есть ли хоть один из 7 путей.
+          'has_targets' => has_targets,
+          # Пустой профиль: ни целей, ни хранилища, ни архивов.
+          'empty' => !has_targets && !store_exists && entries.empty?
         }
       end
+      # Текущий год показываем всегда (даже пустой — в нём создают копии),
+      # чужие пустые профили скрываем, чтобы не плодить мёртвые вкладки.
+      blocks.select { |b| b['current'] || !b['empty'] }
     end
 
     # -- поиск архива ------------------------------------------------------------
@@ -191,7 +247,7 @@ module Dn1supSaveSettings
         # Активная папка — первая: переопределение STORE_DIR в тестах и
         # пользовательская папка архивов всегда побеждают чужие хранилища.
         dirs |= Store.archive_search_dirs
-        SUPPORTED_YEARS.each { |y| dirs << backups_dir_for_year(y) }
+        years.each { |y| dirs << backups_dir_for_year(y) }
       end
       custom = Settings.archive_dir
       dirs << custom unless custom.empty?
@@ -309,17 +365,19 @@ module Dn1supSaveSettings
 
     def entry_year(entry)
       y = entry['su_year'].to_s
-      return y if SUPPORTED_YEARS.include?(y)
+      return y if y =~ YEAR_PATTERN
 
       v = entry['su_version'].to_s
-      # major-версия 24/25/26/27 → год 2024/2025/2026/2027 (SketchUp 2021+: major = год − 2000)
+      # major-версия 21+ → год 2021+ (SketchUp 2021+: major = год − 2000;
+      # 23 → 2023, 27 → 2027). Работает и для будущих версий.
       if v =~ /\A(\d{2,4})/
         major = Regexp.last_match(1).to_i
         guess = major >= 1000 ? major.to_s : (major >= 21 ? (2000 + major).to_s : '')
-        return guess if SUPPORTED_YEARS.include?(guess)
+        return guess if guess =~ YEAR_PATTERN
       end
       # created_at 'YYYY-…'
-      return Regexp.last_match(1) if entry['created_at'].to_s =~ /\A(202[4567])\b/ && SUPPORTED_YEARS.include?(Regexp.last_match(1))
+      m = entry['created_at'].to_s.match(/\A(20\d\d)\b/)
+      return m[1] if m
 
       entry['store_year'].to_s
     end

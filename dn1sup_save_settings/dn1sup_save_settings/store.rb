@@ -67,7 +67,13 @@ module Dn1supSaveSettings
       end
 
       appdata = ENV['APPDATA'] || Dir.home
-      major = defined?(Sketchup) && Sketchup.respond_to?(:version) ? Sketchup.version.to_i : 26
+      major = if defined?(Sketchup) && Sketchup.respond_to?(:version)
+                Sketchup.version.to_i
+              elsif defined?(Dn1supSaveSettings::Paths)
+                Paths.su_year.to_i - 2000
+              else
+                26
+              end
       year = major >= 1000 ? major : 2000 + major
       File.join(appdata, 'SketchUp', "SketchUp #{year}")
     end

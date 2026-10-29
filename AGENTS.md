@@ -12,7 +12,7 @@
 
 ## Локальные правила репозитория
 
-Sketchup API 2024 и выше
+Sketchup API 2023 и выше
 Интерфейс HTML VUE 3 + Tailwind
 
 Настройки путей Sketchup для сохранения

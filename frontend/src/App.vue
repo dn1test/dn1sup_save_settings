@@ -118,10 +118,15 @@ const otherGroups = computed(() =>
 
 // Активная вкладка версии. Внутри вкладки — подвкладки «Настройки»
 // и «История» (выбор запоминается).
+// По умолчанию — текущий профиль SketchUp (флаг current от Ruby).
+// Сброс на текущий — только если выбранного года нет в новом списке
+// (первая загрузка, год пропал): выбор пользователя при обновлениях
+// состояния сохраняется.
 const activeYear = ref(null)
 watch(historyGroups, (groups) => {
-  if (activeYear.value === null && groups.length) {
-    const cur = groups.find(g => g.current) || groups[0]
+  if (!groups.length) return
+  if (!groups.some((g) => g.year === activeYear.value)) {
+    const cur = groups.find((g) => g.current) || groups[0]
     activeYear.value = cur.year
   }
 }, { immediate: true })
